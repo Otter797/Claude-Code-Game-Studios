@@ -65,6 +65,19 @@ window.CONFIG = {
   stun_time: { value: 2.6, min: 0.5, max: 8, step: 0.1 },         // s it stays stunned
   stuns_to_flee: { value: 2, min: 1, max: 6, step: 1 },           // stuns before it goes back to sleep
 
+  burrower_see: { value: 10, min: 3, max: 30, step: 1 },            // m; it notices you this close, if it faces you
+  sight_alert: { value: 3, min: 0.5, max: 12, step: 0.5 },          // alert gained per second while it sees you
+  burrower_roam: { value: 9, min: 0, max: 30, step: 1 },            // m it wanders from its patch
+  burrower_roam_speed: { value: 1.3, min: 0.2, max: 4, step: 0.1 }, // m/s while calm
+
+  // ---- Hunters: what comes the longer you stay ----
+  hunter_first: { value: 150, min: 20, max: 600, step: 10 },        // s into a run before the first one rises
+  hunter_interval: { value: 70, min: 10, max: 300, step: 5 },       // s between hunters
+  hunter_speed_step: { value: 0.1, min: 0, max: 0.5, step: 0.01 },  // each tier is this much faster
+  hunter_bite_step: { value: 0.3, min: 0, max: 1, step: 0.05 },     // each tier bites this much harder
+  hunter_spawn_dist: { value: 24, min: 8, max: 60, step: 1 },       // m behind you it rises
+  hunter_rise: { value: 1.6, min: 0.3, max: 5, step: 0.1 },         // s it takes to climb out: your warning
+
   // ---- Spitter: the one that lobs ----
   spitter_see: { value: 11, min: 4, max: 30, step: 1 },           // m; this close it wakes on sight
   spitter_range: { value: 30, min: 10, max: 60, step: 1 },        // m; it sleeps again beyond this

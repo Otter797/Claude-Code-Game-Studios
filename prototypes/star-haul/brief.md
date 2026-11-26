@@ -19,6 +19,11 @@ After play: "i dont like the look of the home room which pack was used for that?
 After play: "take the kenney kit out and rebuild the home room with the modular space kit"
 After play: "then add these: Quaternius Ultimate Monsters, Elijah Cobden rock pack (itch.io)"
 After play: picked "Squidle and Mushnub" for the Burrower and the Spitter
+After play: "enemies should not just be sitting t-posing waiting to be activated"
+After play: "and the enemies that pop up the longer you are on the asteroid should be more dangerous"
+After play: "i dont like that the rocks spin when you mine them they could just vibrate"
+After play: "find a model for the drill"
+After play: "find new more realistic models for the home and ship"
 
 **Pitch:** Mine a bright little asteroid in first person, fill your pack while your oxygen drains and the rock wakes up, and get back to your ship before you lose it all.
 
@@ -35,14 +40,14 @@ After play: picked "Squidle and Mushnub" for the Burrower and the Spitter
 ## Look and references
 - Look: Stylised realism. Smooth, rounded, textured rock in natural stone colours with a soft pastel cast, real sunlight and shadows, under a soft coloured sky; not low-poly. Ore is the only faceted, glossy, fully saturated thing, and richer ore is more saturated. Hot magenta means danger and nothing else: the creatures, and your oxygen gauge when low. Signature detail: your pack glows brighter as it fills. Every figure drawn, no emoji, no plain circles.
 - References: Astroneer (a colourful, friendly space mood; not its look), Escape from Tarkov (the haul and the loss).
-- Models: free CC0 packs (assets/provenance.yaml): Poly Haven's Boulder 01 and two rock surfaces, OpenGameArt's Handpainted style rocks and Lowpoly crystals pack, Kenney's Modular Space Kit for the home room's shell and hatch. Elijah Cobden's Stylized Rock Pack (CC-BY: credit required) for every other boulder. Quaternius's Squidle and Mushnub Evolved (CC-BY in the supplied file: credit required) for the Burrower and the Spitter. The ship, drill and home furniture are the game's own shapes.
+- Models: free CC0 packs (assets/provenance.yaml): Poly Haven's Boulder 01 and two rock surfaces, OpenGameArt's Handpainted style rocks and Lowpoly crystals pack, Poly Haven's workshop models and surfaces for the home room and its Drill 01 for the drill. Elijah Cobden's Stylized Rock Pack (CC-BY: credit required) for every other boulder. Quaternius's Squidle and Mushnub Evolved (CC-BY in the supplied file: credit required) for the Burrower and the Spitter. The ship, drill and home furniture are the game's own shapes.
 - View: 3D · Camera: first person.
 
 ## First minute
 You step out of your ship onto a sunlit pastel asteroid, drill in hand, oxygen full. A glossy blue seam glints a few steps away. You hold the drill on it, the rock cracks in stages, ore pops out and flies into your pack, and the pack's worth ticks up for the first time. A second seam glints further in, past the edge of the safe landing area, where the rock is darker and something magenta stirs.
 
 ## Challenge
-The landing area is safe. Beyond it the threat is constant: oxygen drains the whole run, and creatures sleep in the rock and wake from mining noise near them, so the richest seams, deepest in, are the most dangerous to work. Running out of oxygen or being killed loses the pack and the tool; you start the next run with a basic drill. Later, a better drill opens harder rock deeper in.
+The landing area is safe. Beyond it the threat is constant: oxygen drains the whole run, and creatures wander the rock and come for you when they hear drilling or see you, so the richest seams, deepest in, are the most dangerous to work. The longer you stay, the worse it gets: from about two and a half minutes in, a hunter rises behind you every minute or so, each one faster and harder-hitting than the last. Running out of oxygen or being killed loses the pack and the tool; you start the next run with a basic drill. Later, a better drill opens harder rock deeper in.
 
 ## Core loop
 - Mine a seam: the rock cracks, ore flies into the pack, its worth climbs, and the noise may wake what sleeps nearby.
@@ -58,7 +63,8 @@ The landing area is safe. Beyond it the threat is constant: oxygen drains the wh
 - [x] First-person mining: rock cracks in stages, ore flies to the pack
 - [x] One hand-made asteroid: a safe landing area, three zones of rising richness and danger *(provisional)*
 - [x] Oxygen that drains all run and faster when sprinting
-- [ ] Creatures in the rock that wake from mining noise, 2 kinds *(guessed)*
+- [x] Creatures that wander the rock and notice you by noise or sight, 2 kinds
+- [x] Hunters: tougher creatures that rise the longer you stay, each tier faster and harder-hitting
 - [x] A limited pack with its worth on screen
 - [ ] The ship as the exit; death loses pack and tool
 - [ ] Home: a saved stash and one crafting bench with the better drill (thin stand-in)
@@ -79,6 +85,8 @@ The landing area is safe. Beyond it the threat is constant: oxygen drains the wh
 ## Avoid
 - "so low-poly"
 - Stylized desert stones, Lowpoly crystals (the single-pack one), Alien Bug Animated, Sci-Fi Free Transport 3 Set: "i dont like these"
+- Enemies "just sitting t-posing waiting to be activated"
+- Ore that spins when mined: "they could just vibrate"
 - Kenney's Space Station Kit in the home room: "i dont like the look of the home room"
 - Player-versus-player; mandatory home chores; a fixed story campaign; timers that force a run (from the concept's anti-pillars)
 

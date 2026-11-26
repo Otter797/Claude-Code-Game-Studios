@@ -21,7 +21,7 @@
 <script src="assets/polyhaven.js"></script>
 <script src="assets/oga-rocks.js"></script>
 <script src="assets/oga-crystals.js"></script>
-<script src="assets/kenney-modular.js"></script>
+<script src="assets/polyhaven-home.js"></script>
 <script src="assets/cobden-rocks.js"></script>
 <script src="assets/quaternius-monsters.js"></script>
 <script>
@@ -298,7 +298,8 @@ function reset() {
     p: { x: SPAWN.x, z: SPAWN.z, yaw: -Math.PI / 2, pitch: -0.08, bob: 0, moving: 0 },
     o2: 1, hp: tune.max_health, pack: [], worth: 0, drill: 1, canisters: 0,
     seams: SEAMS.map(s => ({ left: s.n, prog: 0, shake: 0 })),
-    creatures: DENS.map(d => ({ kind: d.kind, x: d.x, z: d.z, st: 'sleep', noise: 0, t: 0, cd: 0, stuns: 0, face: 0, hit: 0 })),
+    creatures: DENS.map((d, i) => ({ kind: d.kind, x: d.x, z: d.z, hx: d.x, hz: d.z, st: 'sleep', noise: 0, t: 0, cd: 0, stuns: 0, face: i * 1.3, hit: 0, tier: 0, hunter: false, wt: 0, wx: d.x, wz: d.z })),
+    threat: 0, nextHunter: tune.hunter_first,
     globs: [], mining: false, target: -1, targetKind: '', frac: 0, prompt: '', promptBad: false,
     hurt: 0, shake: 0, toast: '', toastT: 0, zone: 'Landing Pad', beat: 0, stir: 0, time: 0, swapped: 0,
     home: { mode: 'walk', queue: [], qt: 0, haul: 0, counted: 0, banner: '', bannerT: 0, near: '' },
@@ -429,7 +430,7 @@ function updatePlay(dt) {
   }
   for (let i = 0; i < state.creatures.length; i++) {
     const c = state.creatures[i];
-    if (c.kind !== 'burrower' || c.st === 'sleep') continue;
+    if (c.kind !== 'burrower' || c.st === 'sleep' || c.st === 'gone' || c.st === 'rise') continue;
     const dx = c.x - p.x, dz = c.z - p.z, dy = height(c.x, c.z) + 0.6 - ey, d = Math.hypot(dx, dy, dz);
     if (d > tune.mine_range + 0.6) continue;
     const dot = (dx * vx + dy * vy + dz * vz) / d;
@@ -514,15 +515,54 @@ function hurtPlayer(dmg) {
   tone(120, 0.25, 'square', 0.45, 60); crunch(0.15, 0.3);
   events.push({ type: 'hurt', dmg });
 }
+const HUNTER_POOL = 8; // hunters that can be out at once, at most
+function spawnHunter() { // it rises out of the rock behind you, a tier worse than the last
+  const p = state.p;
+  for (let k = 0; k < 14; k++) {
+    const a = p.yaw + Math.PI + (rng() - 0.5) * 2.6, r = tune.hunter_spawn_dist * (0.8 + rng() * 0.4);
+    const x = p.x - Math.sin(a) * r, z = p.z - Math.cos(a) * r;
+    if (mask(x, z) < 0.12 || dist(x, z, SHIP.x, SHIP.z) < tune.safe_radius + 4) continue;
+    if (SOLIDS.some(s => dist(x, z, s.x, s.z) < s.r + 1.2)) continue;
+    state.threat++;
+    state.creatures.push({ kind: 'burrower', x, z, hx: x, hz: z, st: 'rise', noise: 0, t: tune.hunter_rise, cd: 1, stuns: 0, face: Math.atan2(p.x - x, p.z - z), hit: 0, tier: state.threat, hunter: true, wt: 0, wx: x, wz: z });
+    toast(`Threat ${state.threat}: something bigger is coming`, 3.5); tone(70, 1.1, 'sawtooth', 0.4, 220); crunch(0.5, 0.4);
+    events.push({ type: 'hunter', tier: state.threat });
+    return true;
+  }
+  return false;
+}
 function updateCreatures(dt, playerSafe) {
   const p = state.p; let stir = 0;
+  // the longer you stay, the worse what comes
+  if (state.time >= state.nextHunter) {
+    const out = state.creatures.filter(c => c.hunter && c.st !== 'gone').length;
+    state.nextHunter = state.time + (!playerSafe && out < HUNTER_POOL && state.creatures.length < DENS.length + 40 && spawnHunter() ? tune.hunter_interval : 6);
+  }
   for (let i = 0; i < state.creatures.length; i++) {
-    const c = state.creatures[i], den = DENS[i];
+    const c = state.creatures[i];
+    if (c.st === 'gone') continue;
     const d = dist(c.x, c.z, p.x, p.z);
+    const speed = tune.burrower_speed * (1 + c.tier * tune.hunter_speed_step), bite = tune.burrower_bite * (1 + c.tier * tune.hunter_bite_step);
     c.cd = Math.max(0, c.cd - dt);
-    if (c.st === 'sleep') {
+    if (c.st === 'sleep') { // calm: it goes about its business until it hears or sees you
       c.noise = Math.max(0, c.noise - tune.noise_decay * dt);
-      if (c.kind === 'spitter' && d < tune.spitter_see && !playerSafe) c.noise = tune.wake_noise;
+      if (c.kind === 'burrower') { // it wanders around its patch
+        c.wt -= dt;
+        if (c.wt <= 0) {
+          const a = rng() * Math.PI * 2, r = 2 + rng() * tune.burrower_roam, wx = c.hx + Math.cos(a) * r, wz = c.hz + Math.sin(a) * r;
+          if (mask(wx, wz) > 0.1 && dist(wx, wz, SHIP.x, SHIP.z) > tune.safe_radius + 2) { c.wx = wx; c.wz = wz; c.wt = 3 + rng() * 5; } else c.wt = 0.3;
+        }
+        const dw = dist(c.x, c.z, c.wx, c.wz);
+        if (dw > 0.4) {
+          let nx = c.x + (c.wx - c.x) / dw * tune.burrower_roam_speed * dt, nz = c.z + (c.wz - c.z) / dw * tune.burrower_roam_speed * dt;
+          [nx, nz] = pushOut(nx, nz, SOLIDS, 0.9); c.face = Math.atan2(c.wx - c.x, c.wz - c.z); c.x = nx; c.z = nz; c.moving = true;
+        } else c.moving = false;
+        // sight: in front of it and close, or very close from any side
+        if (!playerSafe && d < tune.burrower_see) {
+          const ahead = (Math.sin(c.face) * (p.x - c.x) + Math.cos(c.face) * (p.z - c.z)) / (d || 1);
+          if (ahead > 0.3 || d < tune.burrower_see * 0.4) c.noise += tune.sight_alert * dt;
+        }
+      } else if (d < tune.spitter_see && !playerSafe) c.noise = tune.wake_noise;
       if (c.noise >= tune.wake_noise) {
         c.st = c.kind === 'burrower' ? 'chase' : 'awake'; c.t = 0; c.noise = 0; c.stuns = 0; c.cd = 1;
         tone(c.kind === 'burrower' ? 90 : 240, 0.5, 'sawtooth', 0.35, c.kind === 'burrower' ? 300 : 120);
@@ -530,14 +570,15 @@ function updateCreatures(dt, playerSafe) {
       } else if (d < tune.hear_radius) stir = Math.max(stir, c.noise / tune.wake_noise);
       continue;
     }
+    if (c.st === 'rise') { c.t -= dt; if (c.t <= 0) { c.st = 'chase'; c.t = 0; } continue; }
     c.face = Math.atan2(p.x - c.x, p.z - c.z);
     if (c.kind === 'burrower') {
       if (c.st === 'chase') {
         c.t += dt; c.hit = Math.max(0, c.hit - dt * 0.5);
-        const far = dist(c.x, c.z, den.x, den.z) > tune.burrower_leash;
-        if (c.t > tune.burrower_chase_time || far || playerSafe) { c.st = 'return'; continue; }
+        const far = dist(c.x, c.z, c.hx, c.hz) > tune.burrower_leash;
+        if (!c.hunter && (c.t > tune.burrower_chase_time || far || playerSafe)) { c.st = 'return'; continue; } // a hunter never gives up
         if (d > tune.burrower_reach * 0.8) {
-          let nx = c.x + (p.x - c.x) / d * tune.burrower_speed * dt, nz = c.z + (p.z - c.z) / d * tune.burrower_speed * dt;
+          let nx = c.x + (p.x - c.x) / d * speed * dt, nz = c.z + (p.z - c.z) / d * speed * dt;
           [nx, nz] = pushOut(nx, nz, SOLIDS, 0.9);
           if (mask(nx, nz) > 0.03 && dist(nx, nz, SHIP.x, SHIP.z) > tune.safe_radius) { c.x = nx; c.z = nz; }
         }
@@ -545,17 +586,22 @@ function updateCreatures(dt, playerSafe) {
       } else if (c.st === 'windup') {
         c.t -= dt;
         if (c.t <= 0) {
-          if (d < tune.burrower_reach + 0.5) hurtPlayer(tune.burrower_bite);
+          if (d < tune.burrower_reach + 0.5) hurtPlayer(bite);
           c.st = 'chase'; c.t = 0; c.cd = tune.burrower_cooldown;
         }
       } else if (c.st === 'stun') {
         c.t -= dt;
-        if (c.t <= 0) { c.st = c.stuns >= tune.stuns_to_flee ? 'return' : 'chase'; c.t = 0; }
+        if (c.t <= 0) {
+          if (c.stuns >= tune.stuns_to_flee + c.tier) {
+            if (c.hunter) { c.st = 'gone'; toast('It burrows away', 2); tone(160, 0.6, 'sawtooth', 0.3, 50); } else c.st = 'return';
+          } else c.st = 'chase';
+          c.t = 0;
+        }
       } else if (c.st === 'return') {
-        const dh = dist(c.x, c.z, den.x, den.z);
-        c.face = Math.atan2(den.x - c.x, den.z - c.z);
-        if (dh < 0.3) { c.x = den.x; c.z = den.z; c.st = 'sleep'; c.noise = 0; }
-        else { c.x += (den.x - c.x) / dh * tune.burrower_speed * dt; c.z += (den.z - c.z) / dh * tune.burrower_speed * dt; }
+        const dh = dist(c.x, c.z, c.hx, c.hz);
+        c.face = Math.atan2(c.hx - c.x, c.hz - c.z);
+        if (dh < 0.3) { c.st = 'sleep'; c.noise = 0; c.wt = 0; }
+        else { c.x += (c.hx - c.x) / dh * speed * dt; c.z += (c.hz - c.z) / dh * speed * dt; }
       }
     } else { // spitter: rooted, lobs a glob at where you stand
       if (d > tune.spitter_range || playerSafe) { c.st = 'sleep'; c.noise = 0; continue; }
@@ -656,7 +702,7 @@ function updateFx(dt) {
 // only glossy, saturated thing; hot magenta means danger and nothing else.
 // =========================================================================================
 const MAGENTA = 0xff2390;
-const G = { rockyMats: [], rockMeshes: [], crystalMeshes: [], homeShell: [] }; // every 3D object the view needs
+const G = { rockyMats: [], rockMeshes: [], crystalMeshes: [], homeShell: [], homePlain: [], monAnim: [], drillTurn: Math.PI / 2 }; // every 3D object the view needs
 // Stylised realism: natural rock colours with a pastel cast, a rock texture and real shadows.
 let _rock = null;
 function rockTex() { // one tiling rock texture, drawn here: blotches, grain and a few fine cracks
@@ -838,12 +884,13 @@ function buildView() {
     for (let k = 0; k < s.n; k++) {
       const a = k / s.n * Math.PI * 2 + i, c = crystal(s.type, 0.3 + (k % 3) * 0.06);
       c.position.set(Math.sin(a) * 0.62, 0.95 + (k % 2) * 0.14, Math.cos(a) * 0.62);
-      c.rotation.set(Math.cos(a) * 0.55, a, -Math.sin(a) * 0.55); g.add(c); bits.push(c);
+      c.rotation.set(Math.cos(a) * 0.55, a, -Math.sin(a) * 0.55); c.userData.p0 = c.position.clone(); g.add(c); bits.push(c);
     }
     w.add(g); return { g, bits };
   });
   // the creatures
-  G.creatures = DENS.map(d => { const c = d.kind === 'burrower' ? makeBurrower() : makeSpitter(); w.add(c.g); return c; });
+  G.creatures = DENS.map(d => { const c = d.kind === 'burrower' ? makeBurrower() : makeSpitter(); c.kind = d.kind; w.add(c.g); return c; });
+  for (let i = 0; i < 48; i++) { const c = makeBurrower(); c.kind = 'burrower'; c.g.visible = false; w.add(c.g); G.creatures.push(c); } // hunters, as they come
   // globs and the rings that show where they land
   G.globs = []; G.rings = [];
   for (let i = 0; i < 8; i++) {
@@ -879,55 +926,55 @@ function buildView() {
   // ---- home ----
   const h = G.home = new THREE.Scene();
   G.homeHemi = new THREE.HemisphereLight(0xffffff, 0xf1e6ea, 2.0); h.add(G.homeHemi);
-  const hl = new THREE.DirectionalLight(0xfff4e2, 2.2); hl.position.set(3, 8, 5); h.add(hl);
+  const hl = new THREE.DirectionalLight(0xfff4e2, 3.2); hl.position.set(3, 8, 5); h.add(hl);
   h.background = new THREE.Color(0xe7e0f2);
   const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, 0.4, ROOM.d), pastel(0xf5e6d6)); floor.position.y = -0.2; h.add(floor); G.homeShell.push(floor);
-  const ceil = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, 0.4, ROOM.d), pastel(0xf7f1f8)); ceil.position.y = 4.42; ceil.scale.y = 1; h.add(ceil);
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, 0.4, ROOM.d), pastel(0xf7f1f8)); ceil.position.y = 4.42; h.add(ceil); G.homeCeil = ceil;
   const wallMat = pastel(0xece6f6);
   for (const [x, z, sx, sz] of [[0, -ROOM.d / 2, ROOM.w, 0.4], [0, ROOM.d / 2, ROOM.w, 0.4], [-ROOM.w / 2, 0, 0.4, ROOM.d], [ROOM.w / 2, 0, 0.4, ROOM.d]]) {
     const wl = new THREE.Mesh(new THREE.BoxGeometry(sx, 5, sz), wallMat); wl.position.set(x, 2.5, z); h.add(wl); G.homeShell.push(wl);
   }
   for (let i = 0; i < 5; i++) { // floor stripes toward the stash
-    const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.9), pastel(0xe7d2c6)); st.position.set(0, 0.02, 3.4 - i * 1.5); h.add(st);
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.9), pastel(0xe7d2c6)); st.position.set(0, 0.02, 3.4 - i * 1.5); h.add(st); G.homePlain.push(st);
   }
   // the stash wall: four bins, one per ore, that fill as you get rich
   G.bins = {};
   ORE_KEYS.forEach((k, i) => {
     const x = -5.25 + i * 3.5, bin = new THREE.Group(); bin.position.set(x, 0, -5.0);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.2, 0.2), pastel(0xc9c0e2)); back.position.set(0, 1.7, -0.5); bin.add(back);
-    for (const y of [0.25, 1.35, 2.45]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 1.1), pastel(0xb9aed6)); sh.position.set(0, y, 0); bin.add(sh); }
-    for (const sx of [-1.45, 1.45]) { const sd = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 1.1), pastel(0xb9aed6)); sd.position.set(sx, 1.7, 0); bin.add(sd); }
+    const back = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.2, 0.2), pastel(0xc9c0e2)); back.position.set(0, 1.7, -0.5); bin.add(back); G.homePlain.push(back);
+    for (const y of [0.25, 1.35, 2.45]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 1.1), pastel(0xb9aed6)); sh.position.set(0, y, 0); bin.add(sh); G.homePlain.push(sh); }
+    for (const sx of [-1.45, 1.45]) { const sd = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 1.1), pastel(0xb9aed6)); sd.position.set(sx, 1.7, 0); bin.add(sd); G.homePlain.push(sd); }
     const bits = [];
     for (let n = 0; n < 30; n++) {
       const c = crystal(k, 0.17), row = Math.floor(n / 10), col = n % 10;
-      c.position.set(-1.12 + (col % 5) * 0.56 + (col >= 5 ? 0.12 : 0), 0.63 + row * 1.1, col >= 5 ? -0.2 : 0.22);
+      c.position.set(-0.62 + (col % 5) * 0.31 + (col >= 5 ? 0.07 : 0), 0.3 + row * 0.79, col >= 5 ? -0.14 : 0.16);
       c.rotation.set(0.2 * col, n, 0.15 * row); c.visible = false; bin.add(c); bits.push(c);
     }
     h.add(bin); G.bins[k] = bits;
   });
   // the bench
   const bench = new THREE.Group(); bench.position.set(8.4, 0, 0);
-  const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 3.6), pastel(0xf0cdb4)); top.position.y = 1.1; bench.add(top);
-  for (const z of [-1.5, 1.5]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.2), pastel(0xc9a995)); lg.position.set(0, 0.5, z); bench.add(lg); }
-  const vice = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), pastel(0x9c97b8)); vice.position.set(0.1, 1.4, -1.1); bench.add(vice);
-  const board = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 3.2), pastel(0xb9aed6)); board.position.set(0.72, 2.6, 0); bench.add(board);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 3.6), pastel(0xf0cdb4)); top.position.y = 1.1; bench.add(top); G.homePlain.push(top);
+  for (const z of [-1.5, 1.5]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.2), pastel(0xc9a995)); lg.position.set(0, 0.5, z); bench.add(lg); G.homePlain.push(lg); }
+  const vice = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), pastel(0x9c97b8)); vice.position.set(0.1, 1.4, -1.1); bench.add(vice); G.homePlain.push(vice);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 3.2), pastel(0xb9aed6)); board.position.set(0.72, 2.6, 0); bench.add(board); G.homePlain.push(board);
   G.benchDrill = makeDrill(true).g; G.benchDrill.scale.setScalar(2.4); G.benchDrill.position.set(-0.1, 1.5, 0.5); G.benchDrill.rotation.y = 0.6; bench.add(G.benchDrill);
   h.add(bench);
   // the tool rack
   const rack = new THREE.Group(); rack.position.set(-9.0, 0, 0);
-  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 3.6), pastel(0xb9aed6)); rb.position.set(0, 2.1, 0); rack.add(rb);
+  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 3.6), pastel(0xb9aed6)); rb.position.set(0, 2.1, 0); rack.add(rb); G.homePlain.push(rb);
   G.rackBasic = makeDrill(false).g; G.rackBasic.scale.setScalar(2.2); G.rackBasic.position.set(0.3, 2.4, 0.9); G.rackBasic.rotation.set(0, Math.PI / 2, -0.5); rack.add(G.rackBasic);
   G.rackBetter = makeDrill(true).g; G.rackBetter.scale.setScalar(2.2); G.rackBetter.position.set(0.3, 2.4, -0.7); G.rackBetter.rotation.set(0, Math.PI / 2, -0.5); rack.add(G.rackBetter);
   G.rackMark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 1.3), pastel(0x9fd9cf)); G.rackMark.position.set(0.12, 1.5, 0.9); rack.add(G.rackMark);
   G.cans = []; for (let i = 0; i < 4; i++) { const cn = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.34, 8, 18), pastel(0xaecbf0)); cn.position.set(0.35, 0.32, -1.3 + i * 0.45); rack.add(cn); G.cans.push(cn); }
-  const rs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 2.4), pastel(0xb9aed6)); rs.position.set(0.3, 0.05, -0.6); rack.add(rs);
+  const rs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 2.4), pastel(0xb9aed6)); rs.position.set(0.3, 0.05, -0.6); rack.add(rs); G.homePlain.push(rs);
   h.add(rack);
   // the hatch
   const hatch = new THREE.Group(); hatch.position.set(0, 0, 5.75);
   const frame = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.28, 12, 40), pastel(0x9fd9cf)); frame.position.y = 1.9; hatch.add(frame);
   const hd = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.16, 40), pastel(0x7c7a9c)); hd.rotation.x = Math.PI / 2; hd.position.y = 1.9; hatch.add(hd);
   const win = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.2, 28), new THREE.MeshBasicMaterial({ color: 0x8ea4ea })); win.rotation.x = Math.PI / 2; win.position.y = 2.2; hatch.add(win);
-  h.add(hatch); G.hatch = hatch;
+  h.add(hatch); G.hatch = hatch; G.homePlain.push(hatch);
   // wealth lamps: one lights for each step of stash worth
   G.lamps = WEALTH_STEPS.map((_, i) => {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 14), new THREE.MeshBasicMaterial({ color: 0xcfc9e0 }));
@@ -1022,40 +1069,86 @@ function loadPacks() {
     if (geos.length) G.crystalMeshes.forEach((m, i) => { m.geometry = geos[(i * 5) % geos.length]; });
   }, fail('crystals'));
   // the creatures: Squidle as the Burrower and Mushnub as the Spitter, from Quaternius's pack.
-  // Shapes only: the game moves them. They glow magenta as they stir and wake.
+  // Each is eight baked frames of animation; calm ones play it slowly, angry ones fast.
   if (A.monsters) try {
-    const build = d => d.parts.map(p => {
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p.pos, 3)); if (p.idx) g.setIndex(p.idx); g.computeVertexNormals();
-      return { g, color: p.color };
+    const build = (d, speed) => d.parts.map(p => {
+      const frames = p.frames.map(f => new Float32Array(f)), g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(frames[0]), 3)); if (p.idx) g.setIndex(p.idx); g.computeVertexNormals();
+      G.monAnim.push({ g, frames, speed }); return { g, color: p.color };
     });
-    const sq = build(A.monsters.squidle), mu = build(A.monsters.mushnub);
-    const dress = (v, parts, h, y) => {
+    const sets = { burrower: { calm: build(A.monsters.squidle, 1.1), angry: build(A.monsters.squidle, 3.2) }, spitter: { calm: build(A.monsters.mushnub, 0.8), angry: build(A.monsters.mushnub, 2.4) } };
+    const dress = (v, kind, h, y) => {
       const old = new THREE.Group(); while (v.g.children.length) old.add(v.g.children[0]); // the built shape steps aside
-      v.mm = []; const body = new THREE.Group(); body.scale.setScalar(h); body.position.y = y;
-      for (const p of parts) {
+      v.mm = []; v.meshes = []; v.sets = sets[kind]; const body = new THREE.Group(); body.scale.setScalar(h); body.position.y = y;
+      for (const p of v.sets.calm) {
         const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(p.color[0], p.color[1], p.color[2]), roughness: 0.8, emissive: MAGENTA, emissiveIntensity: 0 });
-        const mesh = new THREE.Mesh(p.g, m); mesh.castShadow = true; body.add(mesh); v.mm.push(m);
+        const mesh = new THREE.Mesh(p.g, m); mesh.castShadow = true; mesh.frustumCulled = false; body.add(mesh); v.mm.push(m); v.meshes.push(mesh);
       }
       v.g.add(body);
     };
-    DENS.forEach((d, i) => { if (d.kind === 'burrower') dress(G.creatures[i], sq, 1.5, 0.15); else dress(G.creatures[i], mu, 3.4, 0); });
-    dress(G.figs[0], sq, 1.5, 0.15); dress(G.figs[1], mu, 3.4, 0);
+    for (const v of G.creatures) { if (v.kind === 'burrower') dress(v, 'burrower', 2.0, 0.05); else dress(v, 'spitter', 3.4, 0); }
+    dress(G.figs[0], 'burrower', 2.0, 0.05); dress(G.figs[1], 'spitter', 3.4, 0);
     for (const f of G.figs) for (const m of f.mm) m.emissiveIntensity = 0.25;
   } catch (e) { fail('monsters')(e); }
-  // home: one room shell and the hatch's gate from Kenney's Modular Space Kit
-  if (A['k_room-wide']) {
-    const mgr = new THREE.LoadingManager(); mgr.setURLModifier(u => /colormap\.png$/.test(u) ? A.kenney_colormap : u);
-    const kl = new THREE.GLTFLoader(mgr);
-    const put = (name, x, y, z, ry, sc, then) => kl.parse(buf(A['k_' + name]), '', gl => {
-      const o = gl.scene; o.position.set(x, y, z); o.rotation.y = ry; o.scale.setScalar(sc); G.home.add(o); if (then) then(o);
-    }, fail('modular kit: ' + name));
-    put('room-wide', 0, 0, 0, 0, 1, () => { // the shell has open doorways: plain walls stay just outside it to close them
-      G.homeShell.forEach((m, i) => { if (i === 0) m.visible = false; else m.position.set(m.position.x * 1.045, m.position.y, m.position.z * 1.075); });
+  // home and the drill: Poly Haven's workshop models and surfaces
+  if (A.ph_Drill_01) {
+    const gl = new THREE.GLTFLoader();
+    const model = (key, done) => gl.parse(A['ph_' + key], '', g => done(g.scene), fail('model: ' + key));
+    // fit: scale a model so its height (or width, or longest side) is `size`, centre it and sit it on the floor
+    const fit = (o, size, by) => {
+      o.updateWorldMatrix(true, true); const b = new THREE.Box3().setFromObject(o), s = b.getSize(new THREE.Vector3());
+      const k = size / (by === 'w' ? s.x : by === 'long' ? Math.max(s.x, s.y, s.z) : s.y), g = new THREE.Group();
+      o.scale.multiplyScalar(k); o.position.set(-(b.min.x + b.max.x) / 2 * k, -b.min.y * k, -(b.min.z + b.max.z) / 2 * k); g.add(o); return g;
+    };
+    const put = (key, size, by, spots) => model(key, sc => { // one model, any number of places: [x, y, z, turn]
+      const copies = spots.map((_, i) => i ? sc.clone(true) : sc); // the first is the model itself: a rigged one cannot be cloned this way
+      spots.forEach((s, i) => { const o = fit(copies[i], size, by); o.position.set(s[0], s[1], s[2]); o.rotation.y = s[3] || 0; G.home.add(o); });
     });
-    put('gate-door', 0, 0, 5.6, 0, 0.82, () => { G.hatch.visible = false; });
-    put('cables', -8.2, 0.02, 3.6, 0.6, 1.4);
-    put('template-detail', 8.6, 0, -4.6, 0, 0.9);
-    put('template-detail', -8.6, 0, -4.6, 0, 0.9);
+    // surfaces: concrete floor, metal-plate walls, corrugated ceiling
+    const surf = (m, name, rx, ry) => { m.material = new THREE.MeshStandardMaterial({ map: tex('pht_' + name + '_diff', rx, ry, true), normalMap: tex('pht_' + name + '_nor', rx, ry), roughness: 0.85, metalness: name === 'hangar_concrete_floor' ? 0 : 0.3 }); };
+    surf(G.homeShell[0], 'hangar_concrete_floor', 5, 3);
+    for (let i = 1; i < 5; i++) surf(G.homeShell[i], 'metal_plate', i < 3 ? 6 : 4, 1.5);
+    surf(G.homeCeil, 'corrugated_iron', 6, 4);
+    for (const m of G.homePlain) m.visible = false; // the plain shelves, bench and rack step aside
+    G.hatch.visible = true; // the shutter model draws only its housing, so the plain round hatch stays under it
+    const H = Math.PI / 2;
+    put('steel_frame_shelves_01', 3.3, 'h', [-5.25, -1.75, 1.75, 5.25].map(sx => [sx, 0, -5.15, 0]));
+    put('metal_office_desk', 1.05, 'h', [[8.6, 0, 0, -H]]);
+    put('bench_vice_01', 0.5, 'h', [[8.5, 1.05, -0.95, -H]]);
+    put('vintage_spacecraft_instrument', 0.55, 'h', [[8.8, 1.05, 0.95, -H]]);
+    put('tool_cart', 1.0, 'h', [[8.7, 0, -3.3, -H]]);
+    put('metal_tool_chest', 0.55, 'h', [[8.7, 0, 3.0, -H]]);
+    put('worn_metal_rack', 2.7, 'h', [[-9.3, 0, 0, H]]);
+    model('rollershutter_door', sc => { // the file holds two doors side by side: keep the plain one, as the ship hatch
+      const extra = sc.children.find(c => /graffiti/.test(c.name)); if (extra) sc.remove(extra);
+      sc.traverse(c => { if (c.isMesh) c.material.side = THREE.DoubleSide; });
+      const o = fit(sc, 3.4, 'h'); o.scale.x = 1.5; o.position.set(0, 0, 5.62); o.rotation.y = Math.PI; G.home.add(o);
+    });
+    put('mounted_fluorescent_lights', 3.0, 'w', [[-5.5, 4.05, 0.5, 0], [0, 4.05, 0.5, 0], [5.5, 4.05, 0.5, 0]]);
+    put('portable_generator', 0.95, 'h', [[-8.3, 0, 4.5, 0.6]]);
+    put('propane_tank', 0.85, 'h', [[-6.8, 0, 5.1, 0], [-6.2, 0, 5.2, 1]]);
+    put('barrel_03', 1.1, 'h', [[8.9, 0, -5.0, 0], [7.8, 0, -5.2, 2]]);
+    put('plastic_crate_01', 0.45, 'h', [[5.4, 0, 5.1, 0.2], [5.4, 0.45, 5.1, -0.1], [6.2, 0, 5.0, 1.4]]);
+    put('old_military_crate', 0.55, 'h', [[3.4, 0, 5.1, 0.25]]);
+    // the drill, in hand and on the rack: the Better Drill is the same tool, larger and tinted
+    model('Drill_01', sc => {
+      const make = better => {
+        const o = sc.clone(true);
+        if (better) o.traverse(c => { if (c.isMesh) { c.material = c.material.clone(); c.material.color.setRGB(0.62, 1.0, 0.95); } });
+        const g = fit(o, better ? 0.4 : 0.34, 'long'); g.children[0].position.y -= (better ? 0.4 : 0.34) * 0.5; return g;
+      };
+      const swapIn = (group, better, turn) => { while (group.children.length) group.remove(group.children[0]); const d = make(better); d.rotation.y = turn; group.add(d); };
+      G.drills.forEach((d, i) => swapIn(d.g, i === 1, G.drillTurn)); G.homeDrills.forEach((d, i) => swapIn(d.g, i === 1, G.drillTurn));
+      swapIn(G.rackBasic, false, 0); swapIn(G.rackBetter, true, 0); swapIn(G.benchDrill, true, 0);
+    });
+  }
+}
+function animMonsters(t) { // play the baked frames: blend each pair into the shared shapes
+  for (const a of G.monAnim) {
+    const n = a.frames.length, u = (t * a.speed) % 1 * n, f0 = Math.floor(u) % n, f1 = (f0 + 1) % n, k = u - Math.floor(u);
+    const A0 = a.frames[f0], A1 = a.frames[f1], out = a.g.attributes.position.array;
+    for (let i = 0; i < out.length; i++) out[i] = A0[i] + (A1[i] - A0[i]) * k;
+    a.g.attributes.position.needsUpdate = true;
   }
 }
 const _c = { a: null, b: null };
@@ -1077,7 +1170,7 @@ function syncWorld() {
   G.drills[0].g.visible = scene !== 'title' && state.drill === 1; G.drills[1].g.visible = scene !== 'title' && state.drill === 2;
   const d = G.drills[state.drill - 1];
   d.g.position.set(0.44 + (state.mining ? Math.sin(t * 90) * 0.006 : 0), -0.36 + (p.moving ? Math.sin(p.bob * 1.9) * 0.012 : 0), state.mining ? -0.76 : -0.7);
-  if (state.mining) d.bit.rotation.z += 0.6;
+  if (state.mining && d.bit.parent) d.bit.rotation.z += 0.6;
   // seams
   for (let i = 0; i < SEAMS.length; i++) {
     const s = state.seams[i], v = G.seams[i], n = SEAMS[i].n;
@@ -1087,31 +1180,37 @@ function syncWorld() {
       const pulse = 1 + 0.07 * Math.sin(t * 2.4 + i + k * 1.7);
       const crack = active ? 1 - 0.25 * Math.floor(frac * 3) / 3 : 1; // it cracks in three steps
       c.scale.set(c.userData.s * pulse * crack, c.userData.s * 1.52 * pulse, c.userData.s * pulse * crack);
-      c.rotation.y += active ? 0.25 : 0;
+      c.position.copy(c.userData.p0); // it vibrates under the drill, and never spins
+      if (active) c.position.set(c.userData.p0.x + Math.sin(t * 97 + k) * 0.022, c.userData.p0.y + Math.sin(t * 131) * 0.014, c.userData.p0.z + Math.cos(t * 113 + k) * 0.022);
     }
     v.g.position.x = SEAMS[i].x + (s.shake > 0 ? Math.sin(t * 80) * 0.03 : 0);
   }
   G.oreMat.glint.emissiveIntensity = G.oreMat.ember.emissiveIntensity = G.oreMat.verdite.emissiveIntensity = G.oreMat.sunstone.emissiveIntensity = 0.45 + 0.15 * Math.sin(t * 2.2);
   // creatures
-  for (let i = 0; i < state.creatures.length; i++) {
-    const c = state.creatures[i], v = G.creatures[i], y = height(c.x, c.z);
-    const stir = c.noise / tune.wake_noise;
+  animMonsters(t);
+  for (let i = 0; i < G.creatures.length; i++) {
+    const c = state.creatures[i], v = G.creatures[i];
+    v.g.visible = !!c && c.st !== 'gone'; if (!v.g.visible) continue;
+    const y = height(c.x, c.z), stir = c.noise / tune.wake_noise, calm = c.st === 'sleep', big = 1 + c.tier * 0.16;
     if (c.kind === 'burrower') {
-      const up = c.st === 'sleep' ? 0 : 1;
-      v.g.position.set(c.x + (c.st === 'sleep' && stir > 0.3 ? Math.sin(t * 40) * 0.04 * stir : 0), y - 0.35 + up * 0.5 + (c.st === 'chase' ? Math.abs(Math.sin(t * 9)) * 0.1 : 0), c.z);
-      v.g.rotation.y = c.st === 'sleep' ? i * 1.3 : c.face;
-      v.g.rotation.x = c.st === 'windup' ? -0.55 : c.st === 'stun' ? 0.25 : 0;
-      for (let k = 0; k < 6; k++) { const side = k % 2 ? 1 : -1; v.legs[k].visible = up === 1; v.legs[k].rotation.z = side * (2.2 + (c.st === 'chase' || c.st === 'return' ? Math.sin(t * 14 + k) * 0.3 : 0)); }
-      for (const j of v.jaws) j.scale.setScalar(up ? 1 : 0.5);
-      tint(v.glow, c.st === 'sleep' ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : c.st === 'stun' ? 0.35 : 1);
+      const rise = c.st === 'rise' ? 1 - clamp(c.t / tune.hunter_rise, 0, 1) : 1; // a hunter climbs out of the ground
+      const hop = c.st === 'chase' ? Math.abs(Math.sin(t * 9 + i)) * 0.14 : calm && c.moving ? Math.abs(Math.sin(t * 5 + i)) * 0.06 : 0;
+      v.g.position.set(c.x + (c.st === 'rise' ? Math.sin(t * 60) * 0.05 : 0), y - 2.4 * (1 - rise) + hop, c.z);
+      v.g.rotation.y = c.face; v.g.rotation.x = c.st === 'windup' ? -0.55 : c.st === 'stun' ? 0.3 : 0; v.g.scale.setScalar(big);
+      if (!v.mm) { for (let k = 0; k < 6; k++) { const side = k % 2 ? 1 : -1; v.legs[k].rotation.z = side * (2.2 + (calm && !c.moving ? 0 : Math.sin(t * 14 + k) * 0.3)); } }
+      tint(v.glow, calm ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : c.st === 'stun' ? 0.35 : 1);
     } else {
-      const up = c.st === 'sleep' ? 0.42 + 0.2 * stir : 1;
-      v.g.position.set(c.x, y, c.z); v.g.scale.set(1, lerp(v.g.scale.y, up, 0.15), 1);
-      v.g.rotation.y = c.st === 'sleep' ? i : c.face;
-      v.head.rotation.x = c.st === 'sleep' ? 0.9 : -0.25 + (c.cd < 0.4 ? -0.5 : 0);
-      tint(v.glow, c.st === 'sleep' ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : 1);
+      v.g.position.set(c.x, y, c.z); v.g.scale.set(1, lerp(v.g.scale.y, calm ? 0.86 + 0.04 * Math.sin(t * 1.3 + i) : 1, 0.15), 1);
+      v.g.rotation.y = calm ? i + Math.sin(t * 0.4 + i) * 0.9 : c.face; // calm, it looks around
+      v.head.rotation.x = calm ? 0.3 : -0.25 + (c.cd < 0.4 ? -0.5 : 0);
+      tint(v.glow, calm ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : 1);
     }
-    if (v.mm) for (const m of v.mm) m.emissiveIntensity = clamp((v.glow.userData.k || 0) - 0.42, 0, 1) * 1.6;
+    if (v.mm) {
+      const angry = !calm && c.st !== 'stun', set = angry ? v.sets.angry : v.sets.calm;
+      for (let k = 0; k < v.meshes.length; k++) v.meshes[k].geometry = set[k].g;
+      const glow = clamp((v.glow.userData.k || 0) - 0.42, 0, 1) * 1.6 + (c.hunter ? 0.35 + c.tier * 0.1 : 0);
+      for (const m of v.mm) m.emissiveIntensity = glow;
+    }
   }
   // globs
   for (let i = 0; i < G.globs.length; i++) {
@@ -1144,9 +1243,9 @@ function syncHome() {
   for (const k of ORE_KEYS) { const n = Math.min(30, save.stash[k]); G.bins[k].forEach((c, i) => { c.visible = i < n; }); }
   const worth = stashWorth();
   G.lamps.forEach((m, i) => { m.material.color.setHex(worth >= WEALTH_STEPS[i] ? ORE[ORE_KEYS[i % 4]].color : 0xcfc9e0); m.scale.setScalar(worth >= WEALTH_STEPS[i] ? 1.3 + 0.1 * Math.sin(t * 2 + i) : 1); });
-  G.homeHemi.intensity = 1.9 + 0.7 * Math.min(1, worth / WEALTH_STEPS[WEALTH_STEPS.length - 1]);
+  G.homeHemi.intensity = 2.8 + 0.8 * Math.min(1, worth / WEALTH_STEPS[WEALTH_STEPS.length - 1]);
   G.rackBetter.visible = save.drill2 > 0; G.benchDrill.visible = canCraftDrill();
-  G.benchDrill.rotation.y = t * 0.8;
+  G.benchDrill.rotation.y = t * 0.8; G.benchDrill.position.y = 1.75;
   G.rackMark.position.z = save.useDrill2 && save.drill2 > 0 ? -0.7 : 0.9;
   G.cans.forEach((c, i) => { c.visible = i < save.canisters; });
 }
@@ -1214,6 +1313,7 @@ function hudPlay() {
   suitIcon(48, 96, '#f2f0fa'); bar(72, 86, 180, 18, state.hp / tune.max_health, '#f2f0fa');
   text(`${Math.max(0, Math.ceil(state.hp))}`, 322, 96, 22, '#ffffff', 'right', 'bold');
   if (state.canisters > 0) label(`Q: oxygen canister ×${state.canisters}`, 34, 150, 18, '#bfe6ff', 'left');
+  if (state.threat > 0) label(`Threat ${state.threat}`, 34, state.canisters > 0 ? 190 : 150, 20, HOT, 'left');
   // the pack and its worth, top right
   const cols = 8, rows = Math.ceil(tune.pack_slots / cols), pw = 300, ph = 74 + rows * 26;
   plate(W - pw - 20, 18, pw, ph);
@@ -1232,7 +1332,7 @@ function hudPlay() {
   text(`Ship ${Math.round(ds)} m   ·   walk back ${mmss(walk)}`, W / 2 + 14, H - 41, 20, tight ? HOT : '#ffffff');
   // awake creatures: a magenta wedge on the side they are on
   for (const c of state.creatures) {
-    if (c.st === 'sleep' || c.st === 'return') continue;
+    if (c.st === 'sleep' || c.st === 'return' || c.st === 'gone') continue;
     const a = bearing(c.x, c.z), d = dist(c.x, c.z, p.x, p.z);
     if (d > 45) continue;
     arrow(W / 2 + Math.sin(a) * 250, H / 2 - Math.cos(a) * 250, a, d < 10 ? 20 : 14, HOT);
@@ -1297,7 +1397,8 @@ function hudHome() {
   if (h.bannerT > 0 && h.banner) label(h.banner, W / 2, 176, 20, '#fff2c2');
 }
 function hudTitle() {
-  plate(W / 2 - 430, 96, 860, 500, 0.78);
+  plate(W / 2 - 430, 96, 860, 530, 0.78);
+  text('Models: Poly Haven · OpenGameArt · Kenney · Stylized Rock Pack by Elijah Cobden · Ultimate Monsters Pack by Quaternius', W / 2, 604, 15, '#d8d4ec');
   text(TITLE, W / 2, 168, 84, '#fff2c2', 'center', 'bold');
   text('Mine the rock. Fill your pack. Get back to your ship.', W / 2, 238, 24, '#ffffff');
   for (let i = 0; i < 4; i++) gem(W / 2 - 96 + i * 64, 292, 16, ORE[ORE_KEYS[i]].css);
@@ -1320,7 +1421,7 @@ const scenes = {
   figures: {
     update(dt) { state.t += dt; },
     draw() {
-      if (renderer) renderer.render(G.fig, G.figCam);
+      if (renderer) { animMonsters(state.t); renderer.render(G.fig, G.figCam); }
       label('Burrower', W / 2 - 250, H - 96, 26); label('Spitter', W / 2 + 250, H - 96, 26);
       label('Sleeps in the rock. Chases what wakes it.', W / 2 - 250, H - 54, 17, '#d8d4ec');
       label('Rooted. Lobs globs at where you stand.', W / 2 + 250, H - 54, 17, '#d8d4ec');
