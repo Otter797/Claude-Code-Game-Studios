@@ -1,0 +1,1411 @@
+<!doctype html>
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: Is 'one more seam or leave now' tense on a 10 to 15 minute run, and is unpacking at home satisfying enough to go straight back out? -->
+<!-- Date: 2026-11-26 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star Haul</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14162a; overflow: hidden; }
+  body { font-variant-numeric: tabular-nums; }
+  #wrap { position: relative; margin: 0 auto; }
+  canvas { display: block; position: absolute; left: 0; top: 0; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="view"></canvas><canvas id="game"></canvas></div>
+<script src="vendor/three.js"></script>
+<script src="config.js"></script>
+<script src="assets/polyhaven.js"></script>
+<script src="assets/oga-rocks.js"></script>
+<script src="assets/oga-crystals.js"></script>
+<script src="assets/kenney-modular.js"></script>
+<script src="assets/cobden-rocks.js"></script>
+<script src="assets/quaternius-monsters.js"></script>
+<script>
+'use strict';
+// Star Haul: one asteroid mining run, then home to unpack and craft.
+// The starter's check hooks are kept: the fixed step, the clock hook, window.game and the
+// play and figures scenes.
+
+// ---- Built to be checked ----------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
+const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
+const W = 1280, H = 720;        // logical size of the HUD
+const FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
+const TITLE = 'Star Haul';
+const CONTROLS = [
+  'W A S D: move      Mouse or arrow keys: look',
+  'Hold left click or Space: drill      Shift: sprint (burns oxygen)',
+  'E: use      Q: oxygen canister      P: pause      M: mute',
+];
+const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
+const CHEAP = params.get('render') === 'cheap'; // a headless shot or check: 3D draws cheap; players never see it
+let seed;
+function rng() { // mulberry32; every gameplay random call reads this, never Math.random
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const events = []; // window.game.events: anything the game wants a run to see
+
+// ---- Screen: a 3D view with a 2D HUD canvas over it ---------------------------------------
+const wrap = document.getElementById('wrap');
+const view = document.getElementById('view');
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: view, antialias: !CHEAP });
+} catch (e) { events.push({ type: 'no-webgl' }); }
+function fit() { // fills the window at any size and pixel ratio
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  const r = s * (devicePixelRatio || 1);
+  const cw = Math.round(W * s), ch = Math.round(H * s);
+  wrap.style.width = cw + 'px'; wrap.style.height = ch + 'px';
+  wrap.style.marginTop = Math.max(0, Math.floor((innerHeight - ch) / 2)) + 'px';
+  canvas.width = Math.round(W * r); canvas.height = Math.round(H * r);
+  canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  if (renderer) {
+    renderer.setPixelRatio(CHEAP ? 0.5 : Math.min(devicePixelRatio || 1, 2));
+    renderer.setSize(cw, ch, false);
+    view.style.width = cw + 'px'; view.style.height = ch + 'px';
+  }
+}
+addEventListener('resize', fit); fit();
+
+// ---- Input: keys by position (event.code), OS key repeat ignored ------------------------
+const down = new Set(), hit = new Set();
+const pressed = code => hit.has(code); // true for one step after the key goes down
+let mouseMine = false, locked = false;
+addEventListener('keydown', e => {
+  startAudio();
+  if (!e.repeat) { down.add(e.code); hit.add(e.code); }
+  if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => down.delete(e.code));
+addEventListener('blur', () => { down.clear(); mouseMine = false; });
+wrap.addEventListener('pointerdown', e => {
+  startAudio();
+  if (scene === 'title') { hit.add('Enter'); }
+  if (scene === 'pause') { hit.add('KeyP'); }
+  if (!locked && wrap.requestPointerLock) { try { const p = wrap.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) { /* no lock: the arrow keys look */ } }
+  if (e.button === 0) mouseMine = true;
+});
+addEventListener('pointerup', e => { if (e.button === 0) mouseMine = false; });
+document.addEventListener('pointerlockchange', () => {
+  const now = document.pointerLockElement === wrap;
+  if (locked && !now && (scene === 'play' || scene === 'home')) { state.prev = scene; scene = 'pause'; }
+  locked = now; mouseMine = false;
+});
+addEventListener('mousemove', e => {
+  if (!locked || !state || (scene !== 'play' && scene !== 'home')) return;
+  state.p.yaw -= e.movementX * tune.look_sens;
+  state.p.pitch = clamp(state.p.pitch - e.movementY * tune.look_sens, -1.35, 1.35);
+});
+
+// ---- Audio: started on first input, mute on M --------------------------------------------
+let audio = null, muted = false, drillVoice = null, noiseBuf = null;
+function startAudio() {
+  if (!audio) {
+    try {
+      const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)(); // a check may inject one
+      const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
+      out.connect(ac.destination); audio = { ac, out };
+    } catch (e) { return; }
+  }
+  if (audio.ac.state === 'suspended') audio.ac.resume();
+}
+function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
+addEventListener('tune', () => setMuted(muted)); // the tweak panel (an add-on), when added, moved a value: the volume follows
+function tone(freq, dur, type = 'square', vol = 0.3, slideTo = 0) {
+  if (!audio || muted) return;
+  try {
+    const t = audio.ac.currentTime, o = audio.ac.createOscillator(), g = audio.ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(audio.out); o.start(t); o.stop(t + dur);
+  } catch (e) { /* sound never stops the game */ }
+}
+function crunch(dur = 0.18, vol = 0.35) { // a burst of filtered noise: rock breaking
+  if (!audio || muted) return;
+  try {
+    const ac = audio.ac;
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0); let s = 12345;
+      for (let i = 0; i < d.length; i++) { s = (s * 16807) % 2147483647; d[i] = (s / 2147483647) * 2 - 1; }
+    }
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), t = ac.currentTime;
+    src.buffer = noiseBuf; f.type = 'lowpass'; f.frequency.value = 900;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f).connect(g).connect(audio.out); src.start(t); src.stop(t + dur);
+  } catch (e) { /* sound never stops the game */ }
+}
+function drillSound(on, frac) {
+  if (!audio || muted) on = false;
+  try {
+    if (on && !drillVoice) {
+      const o = audio.ac.createOscillator(), g = audio.ac.createGain();
+      o.type = 'sawtooth'; g.gain.value = 0.07; o.connect(g).connect(audio.out); o.start();
+      drillVoice = { o, g };
+    }
+    if (on && drillVoice) drillVoice.o.frequency.value = 62 + frac * 70;
+    if (!on && drillVoice) { drillVoice.o.stop(); drillVoice = null; }
+  } catch (e) { drillVoice = null; }
+}
+
+// ---- Small maths ------------------------------------------------------------------------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const dist = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+
+// ---- The asteroid: one hand-made rock, the same every run ---------------------------------
+// The walkable ground is a chain of overlapping discs from the landing pad to the Deep.
+const DISCS = [
+  { x: -100, z: 0, r: 35 },   // the landing pad (safe)
+  { x: -60, z: 6, r: 32 },    // the Shallows
+  { x: -22, z: -6, r: 20 },   // the Arch Pass
+  { x: 20, z: -26, r: 42 },   // Midfield
+  { x: 10, z: 30, r: 26 },    // Ember Shelf
+  { x: 64, z: -4, r: 20 },    // the Ridge
+  { x: 106, z: 12, r: 40 },   // the Deep
+];
+const SHIP = { x: -104, z: 0 };
+const SPAWN = { x: -96.5, z: 0.5 };
+function mask(x, z) {
+  let m = -9;
+  for (const c of DISCS) m = Math.max(m, 1 - Math.hypot(x - c.x, z - c.z) / c.r);
+  return m;
+}
+function height(x, z) {
+  let h = 1.4 * Math.sin(x * 0.07 + 1.3) * Math.cos(z * 0.09) + 0.8 * Math.sin(x * 0.19 + z * 0.13)
+    + 0.35 * Math.sin(x * 0.5) * Math.sin(z * 0.43) + 0.1 * Math.sin(x * 1.3 + z * 0.6) * Math.sin(z * 1.1 - x * 0.4);
+  h *= 1 - sstep(0.25, 0.7, 1 - Math.hypot(x - SHIP.x, z - SHIP.z) / 35); // the pad is flat
+  h -= 7 * sstep(0, 0.6, 1 - Math.hypot(x - 106, z - 12) / 46);           // the Deep sinks
+  h += 4 * sstep(0, 0.7, 1 - Math.hypot(x - 10, z - 30) / 30);            // the Shelf rises
+  const m = mask(x, z);
+  if (m < 0) h -= Math.min(1, -m * 1.5) * 45 + (-m) * 6;                  // the cliff into the void
+  return h;
+}
+function zoneName(x, z) {
+  if (dist(x, z, SHIP.x, SHIP.z) < tune.safe_radius) return 'Landing Pad';
+  if (x < -36) return 'The Shallows';
+  if (x < -4) return 'Arch Pass';
+  if (x < 36 && z > 10) return 'Ember Shelf';
+  if (x < 52) return 'Midfield';
+  if (x < 78) return 'The Ridge';
+  return 'The Deep';
+}
+const ORE = {
+  glint: { name: 'Glint', color: 0x1fa8ff, css: '#3cb4ff' },
+  ember: { name: 'Ember', color: 0xff7a14, css: '#ff8a2a' },
+  verdite: { name: 'Verdite', color: 0x10c95c, css: '#22d46a' },
+  sunstone: { name: 'Sunstone', color: 0xffd000, css: '#ffd91a' },
+};
+const ORE_KEYS = ['glint', 'ember', 'verdite', 'sunstone'];
+const oreValue = k => tune['value_' + k];
+const oreTough = k => tune['tough_' + k];
+// Each seam: where it is, what it holds, how many pieces.
+const SEAMS = [
+  // the pad and its edge: safe, poor
+  [-92, 0.5, 'glint', 3], [-88, 16, 'glint', 3], [-84, -18, 'glint', 3], [-74, 4, 'glint', 4],
+  // the Shallows
+  [-62, 24, 'glint', 4], [-52, -14, 'glint', 4], [-44, 10, 'glint', 5],
+  // the Arch Pass
+  [-24, -16, 'glint', 4], [-16, 2, 'ember', 3],
+  // Midfield
+  [4, -30, 'ember', 4], [18, -50, 'ember', 4], [30, -22, 'ember', 5], [38, -46, 'ember', 4],
+  [10, -10, 'glint', 5], [26, -4, 'glint', 4], [44, -28, 'verdite', 2],
+  // Ember Shelf
+  [2, 34, 'ember', 5], [16, 44, 'ember', 4], [22, 30, 'verdite', 3],
+  // the Ridge
+  [60, -12, 'ember', 4], [70, 2, 'verdite', 3],
+  // the Deep
+  [92, -4, 'verdite', 4], [100, 28, 'verdite', 5], [118, 0, 'verdite', 4], [126, 22, 'verdite', 4],
+  [88, 18, 'ember', 4], [108, 14, 'sunstone', 3], [124, -12, 'sunstone', 3], [96, 40, 'sunstone', 3],
+  [134, 10, 'sunstone', 3],
+].map(s => ({ x: s[0], z: s[1], type: s[2], n: s[3] }));
+// Each creature sleeps at its hole until noise wakes it.
+const DENS = [
+  ['burrower', -48, -6], ['burrower', -6, -12],
+  ['burrower', 12, -40], ['burrower', 34, -32], ['burrower', 22, -14], ['spitter', 46, -36],
+  ['burrower', 10, 40], ['burrower', 20, 36],
+  ['burrower', 64, -6], ['spitter', 72, -10],
+  ['burrower', 96, 4], ['burrower', 112, 26], ['burrower', 120, 6], ['burrower', 104, 34],
+  ['burrower', 130, -4], ['spitter', 110, 8], ['spitter', 128, 16], ['spitter', 98, 24],
+].map(d => ({ kind: d[0], x: d[1], z: d[2] }));
+// Boulders and spires: landmarks and cover. [x, z, radius, how tall]
+const ROCKS = [
+  [-112, 18, 2.2, 1], [-116, -14, 3, 1.1], [-90, -26, 2.5, 0.9], [-84, 28, 2, 1],
+  [-70, -10, 3.2, 1.2], [-66, 18, 2.4, 0.9], [-56, 30, 4, 1.3], [-50, 4, 2, 0.8], [-42, -20, 3.6, 1.1],
+  [-38, 22, 2.8, 1], [-58, -22, 2.5, 1],
+  [-27, 1, 2.6, 2.6], [-19, -13, 2.6, 2.6], // the arch's two pillars
+  [0, -20, 3, 1.1], [8, -46, 4.5, 1.2], [22, -37, 2.6, 0.9], [28, -58, 3.4, 1.3], [40, -14, 4, 1.4],
+  [52, -44, 3, 1], [14, -2, 2.4, 0.9], [34, 4, 3.2, 1.1], [52, -22, 2.8, 1],
+  [0, 22, 3, 1], [24, 47, 3.6, 1.3], [-6, 40, 2.6, 1], [28, 22, 2.4, 0.9],
+  [58, 6, 3.4, 1.2], [70, -18, 3, 1.1], [77, 8, 2.6, 1],
+  [98, -17, 2.6, 3.2], [114, 36, 3.4, 3.6], [120, -24, 3, 3], [139, 22, 3, 3.4], [106, -3, 2.2, 2.8],
+  [86, 34, 3, 3], [131, 35, 2.6, 2.6], [142, -2, 3, 3.2],
+].map(r => ({ x: r[0], z: r[1], r: r[2], tall: r[3] }));
+const SOLIDS = []; // circles the player cannot walk through
+for (const r of ROCKS) SOLIDS.push({ x: r.x, z: r.z, r: r.r * 0.85 });
+for (const s of SEAMS) SOLIDS.push({ x: s.x, z: s.z, r: 2.0 });
+for (const d of DENS) if (d.kind === 'spitter') SOLIDS.push({ x: d.x, z: d.z, r: 0.9 });
+SOLIDS.push({ x: SHIP.x, z: SHIP.z, r: 3.4 });
+
+// ---- Home: one room. A stash wall, a bench, a tool rack and the hatch ---------------------
+const ROOM = { w: 20, d: 12 };
+const STATIONS = [
+  { id: 'stash', name: 'Stash', x: 0, z: -5.2 },
+  { id: 'bench', name: 'Crafting bench', x: 8.3, z: 0 },
+  { id: 'rack', name: 'Tool rack', x: -8.3, z: 0 },
+  { id: 'hatch', name: 'Ship hatch', x: 0, z: 5.4 },
+];
+const WEALTH_STEPS = [100, 300, 600, 1000, 1500, 2200, 3000, 4000]; // stash worth that lights each lamp
+
+// ---- The save: versioned, so a later build can migrate it ---------------------------------
+const SAVE_KEY = 'star-haul-save-v1';
+let save;
+function freshSave() {
+  return { version: 1, stash: { glint: 0, ember: 0, verdite: 0, sunstone: 0 }, drill2: 0, canisters: 0,
+    best: 0, runs: 0, deaths: 0, goal: false, useDrill2: false };
+}
+function loadSave() {
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.version === 1 && s.stash) return s; } catch (e) { /* no save */ }
+  return freshSave();
+}
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* private window */ } }
+const stashWorth = () => ORE_KEYS.reduce((a, k) => a + save.stash[k] * oreValue(k), 0);
+const packWorth = () => state.pack.reduce((a, k) => a + oreValue(k), 0);
+const canCraftDrill = () => save.stash.glint >= tune.drill2_glint && save.stash.ember >= tune.drill2_ember && save.stash.verdite >= tune.drill2_verdite;
+const canCraftCan = () => save.stash.glint >= tune.canister_glint && save.stash.ember >= tune.canister_ember;
+
+// ---- State: plain data, everything a check can read ---------------------------------------
+let scene, state;
+function reset() {
+  seed = Number(params.get('seed')) || CONFIG.seed;
+  save = loadSave();
+  state = {
+    t: 0, score: 0, gained: '', prev: 'play',
+    p: { x: SPAWN.x, z: SPAWN.z, yaw: -Math.PI / 2, pitch: -0.08, bob: 0, moving: 0 },
+    o2: 1, hp: tune.max_health, pack: [], worth: 0, drill: 1, canisters: 0,
+    seams: SEAMS.map(s => ({ left: s.n, prog: 0, shake: 0 })),
+    creatures: DENS.map(d => ({ kind: d.kind, x: d.x, z: d.z, st: 'sleep', noise: 0, t: 0, cd: 0, stuns: 0, face: 0, hit: 0 })),
+    globs: [], mining: false, target: -1, targetKind: '', frac: 0, prompt: '', promptBad: false,
+    hurt: 0, shake: 0, toast: '', toastT: 0, zone: 'Landing Pad', beat: 0, stir: 0, time: 0, swapped: 0,
+    home: { mode: 'walk', queue: [], qt: 0, haul: 0, counted: 0, banner: '', bannerT: 0, near: '' },
+    lost: null,
+  };
+}
+function startRun() {
+  const s = save; reset(); save = s;
+  state.drill = save.useDrill2 && save.drill2 > 0 ? 2 : 1;
+  if (state.drill === 2) save.drill2--;                     // the drill leaves the rack: it is at risk
+  state.canisters = Math.min(save.canisters, tune.canister_carry);
+  save.canisters -= state.canisters;
+  save.runs++; writeSave();
+  toast('Landing Pad', 3);
+  events.push({ type: 'run-start', drill: state.drill });
+  scene = 'play';
+}
+function goHome(from) {
+  const p = state.p; p.x = 0; p.z = 2.6; p.yaw = 0; p.pitch = -0.05;
+  const h = state.home; h.mode = 'walk'; h.queue = []; h.banner = ''; h.bannerT = 0;
+  if (from === 'extract') {
+    if (state.drill === 2) save.drill2++;                   // the drill comes home
+    save.canisters += state.canisters;
+    h.queue = state.pack.slice().sort((a, b) => oreValue(a) - oreValue(b));
+    h.haul = packWorth(); h.counted = 0; h.qt = 0.5;
+    h.mode = h.queue.length ? 'unpack' : 'walk';
+    if (!h.queue.length) banner('You came home with an empty pack.', 4);
+    if (h.haul > save.best) save.best = h.haul;
+  } else if (from === 'death') {
+    banner(state.lost ? state.lost.line : '', 6);
+    if (save.drill2 <= 0) save.useDrill2 = false;
+  }
+  state.pack = []; state.canisters = 0; state.drill = 1; state.mining = false;
+  writeSave(); scene = 'home';
+}
+function die(why) {
+  const n = state.pack.length, w = packWorth();
+  const tool = state.drill === 2 ? 'your Better Drill' : 'your drill';
+  state.lost = { why, n, w, line: `Lost out there: ${n} ore worth ${w}, and ${tool}. The stash is safe.` };
+  state.gained = why;
+  save.deaths++; if (save.drill2 <= 0) save.useDrill2 = false; writeSave();
+  drillSound(false, 0); tone(180, 0.9, 'sawtooth', 0.4, 40);
+  events.push({ type: 'death', why, lost: w });
+  scene = 'over';
+}
+function toast(s, secs = 3) { state.toast = s; state.toastT = secs; }
+function banner(s, secs = 5) { state.home.banner = s; state.home.bannerT = secs; }
+
+// ---- Moving the player ------------------------------------------------------------------
+function look(dt) {
+  const p = state.p, k = tune.key_turn * dt;
+  if (down.has('ArrowLeft')) p.yaw += k;
+  if (down.has('ArrowRight')) p.yaw -= k;
+  if (down.has('ArrowUp')) p.pitch = clamp(p.pitch + k * 0.7, -1.35, 1.35);
+  if (down.has('ArrowDown')) p.pitch = clamp(p.pitch - k * 0.7, -1.35, 1.35);
+}
+function wish() { // the direction the keys ask for, in world x and z
+  const p = state.p;
+  const f = (down.has('KeyW') ? 1 : 0) - (down.has('KeyS') ? 1 : 0);
+  const r = (down.has('KeyD') ? 1 : 0) - (down.has('KeyA') ? 1 : 0);
+  if (!f && !r) return null;
+  const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+  const x = fx * f + rx * r, z = fz * f + rz * r, l = Math.hypot(x, z);
+  return { x: x / l, z: z / l };
+}
+function pushOut(nx, nz, solids, pad) {
+  for (const s of solids) {
+    const d = Math.hypot(nx - s.x, nz - s.z), min = s.r + pad;
+    if (d < min && d > 0.0001) { nx = s.x + (nx - s.x) / d * min; nz = s.z + (nz - s.z) / d * min; }
+  }
+  return [nx, nz];
+}
+
+// ---- Play: the run ----------------------------------------------------------------------
+function updatePlay(dt) {
+  const p = state.p;
+  state.t += dt; state.time += dt;
+  look(dt);
+
+  // move
+  const w = wish();
+  const sprint = down.has('ShiftLeft') || down.has('ShiftRight');
+  const fill = state.pack.length / tune.pack_slots;
+  let speed = (sprint ? tune.sprint_speed : tune.walk_speed) * (1 - tune.full_pack_slow * fill);
+  p.moving = w ? (sprint ? 2 : 1) : 0;
+  if (w) {
+    let nx = p.x + w.x * speed * dt, nz = p.z + w.z * speed * dt;
+    [nx, nz] = pushOut(nx, nz, SOLIDS, 0.5);
+    if (mask(nx, nz) < 0.04) { // the rim: slide along it
+      if (mask(nx, p.z) >= 0.04) nz = p.z; else if (mask(p.x, nz) >= 0.04) nx = p.x; else { nx = p.x; nz = p.z; }
+    }
+    p.x = nx; p.z = nz; p.bob += speed * dt;
+  }
+
+  // oxygen
+  const use = (sprint && w ? tune.sprint_oxygen_mult : 1) / tune.oxygen_seconds;
+  state.o2 = Math.max(0, state.o2 - use * dt);
+  if (state.o2 <= 0) { state.hp -= tune.suffocate_dps * dt; state.hurt = Math.max(state.hurt, 0.4); }
+  if (pressed('KeyQ')) {
+    if (state.canisters > 0 && state.o2 < 0.98) {
+      state.canisters--; state.o2 = Math.min(1, state.o2 + tune.canister_refill);
+      toast('Oxygen canister used', 2); tone(520, 0.25, 'sine', 0.3, 880);
+    } else if (state.canisters <= 0) toast('No oxygen canister', 1.5);
+  }
+  const low = state.o2 < tune.oxygen_low;
+  if (low) { // a heartbeat that quickens as the tank empties
+    state.beat -= dt;
+    if (state.beat <= 0) { state.beat = lerp(0.36, 0.95, state.o2 / tune.oxygen_low); tone(58, 0.14, 'sine', 0.55); }
+  }
+
+  // zone
+  const z = zoneName(p.x, p.z);
+  if (z !== state.zone) { state.zone = z; toast(z, 2.5); }
+  const safe = z === 'Landing Pad';
+
+  // what the drill points at
+  const cp = Math.cos(p.pitch), vx = -Math.sin(p.yaw) * cp, vy = Math.sin(p.pitch), vz = -Math.cos(p.yaw) * cp;
+  const ey = height(p.x, p.z) + 1.7;
+  let best = -1, bestKind = '', bestDot = 0.86;
+  for (let i = 0; i < SEAMS.length; i++) {
+    if (state.seams[i].left <= 0) continue;
+    const s = SEAMS[i], dx = s.x - p.x, dz = s.z - p.z;
+    if (Math.abs(dx) > 8 || Math.abs(dz) > 8) continue;
+    const dy = height(s.x, s.z) + 0.9 - ey, d = Math.hypot(dx, dy, dz);
+    if (d > tune.mine_range + 1.2) continue;
+    const dot = (dx * vx + dy * vy + dz * vz) / d;
+    if (dot > bestDot) { bestDot = dot; best = i; bestKind = 'seam'; }
+  }
+  for (let i = 0; i < state.creatures.length; i++) {
+    const c = state.creatures[i];
+    if (c.kind !== 'burrower' || c.st === 'sleep') continue;
+    const dx = c.x - p.x, dz = c.z - p.z, dy = height(c.x, c.z) + 0.6 - ey, d = Math.hypot(dx, dy, dz);
+    if (d > tune.mine_range + 0.6) continue;
+    const dot = (dx * vx + dy * vy + dz * vz) / d;
+    if (dot > 0.78) { bestDot = 2; best = i; bestKind = 'creature'; }
+  }
+  if (best !== state.target || bestKind !== state.targetKind) { state.target = best; state.targetKind = bestKind; }
+  const trigger = mouseMine || down.has('Space');
+  const power = state.drill === 2 ? tune.drill2_power : tune.drill_power;
+  state.mining = false; state.prompt = ''; state.promptBad = false; state.frac = 0;
+
+  if (bestKind === 'seam') {
+    const s = SEAMS[best], ss = state.seams[best], full = state.pack.length >= tune.pack_slots;
+    const cheapest = full ? Math.min(...state.pack.map(oreValue)) : 0;
+    if (s.type === 'sunstone' && state.drill !== 2) { state.prompt = 'Sunstone: this rock needs the Better Drill'; state.promptBad = true; }
+    else if (full && oreValue(s.type) <= cheapest) { state.prompt = 'Pack full'; state.promptBad = true; }
+    else {
+      state.prompt = `${ORE[s.type].name}  ·  worth ${oreValue(s.type)}${full ? '  ·  swaps out your cheapest ore' : ''}`;
+      if (trigger) {
+        state.mining = true; ss.prog += power * dt; ss.shake = 0.12;
+        if (ss.prog >= oreTough(s.type)) {
+          ss.prog = 0; ss.left--;
+          if (full) { const i = state.pack.findIndex(k => oreValue(k) === cheapest); state.pack.splice(i, 1); state.swapped++; }
+          state.pack.push(s.type); state.worth = packWorth(); state.score = state.worth;
+          makeNoise(tune.break_noise, 1);
+          crunch(0.22, 0.4); tone(660 + ORE_KEYS.indexOf(s.type) * 180, 0.22, 'triangle', 0.3, 1320 + ORE_KEYS.indexOf(s.type) * 220);
+          fx.push({ kind: 'ore', type: s.type, x: s.x, y: height(s.x, s.z) + 1, z: s.z, t: 0 });
+          for (let k = 0; k < 8; k++) spawnFlake(s.x, height(s.x, s.z) + 0.9, s.z);
+          events.push({ type: 'ore', ore: s.type, worth: state.worth });
+        }
+        state.frac = ss.prog / oreTough(s.type);
+      } else state.frac = ss.prog / oreTough(s.type);
+    }
+  } else if (bestKind === 'creature') {
+    const c = state.creatures[best];
+    state.prompt = c.st === 'stun' ? 'Stunned' : 'Drill it to stun it';
+    if (trigger && c.st !== 'stun' && c.st !== 'return') {
+      state.mining = true; c.hit += dt; state.frac = c.hit / tune.stun_drill_time;
+      if (c.hit >= tune.stun_drill_time) {
+        c.hit = 0; c.stuns++; c.st = 'stun'; c.t = tune.stun_time;
+        crunch(0.2, 0.4); tone(300, 0.3, 'square', 0.25, 90);
+        events.push({ type: 'stun' });
+      }
+    }
+  }
+  if (state.mining) {
+    makeNoise(tune.drill_noise * dt, 0);
+    if (rng() < 0.35) { const s = bestKind === 'seam' ? SEAMS[best] : state.creatures[best]; spawnFlake(s.x, height(s.x, s.z) + 0.9, s.z); }
+  }
+  if (sprint && w) makeNoise(tune.sprint_noise * dt, 0, 12);
+  drillSound(state.mining, state.frac);
+
+  updateCreatures(dt, safe);
+
+  // the ship: the only way out
+  const ds = dist(p.x, p.z, SHIP.x, SHIP.z);
+  if (ds < 6.2) {
+    if (!state.prompt) state.prompt = state.pack.length ? `E: board and fly home with ${state.worth}` : 'E: board and fly home (empty pack)';
+    if (pressed('KeyE')) {
+      drillSound(false, 0); tone(330, 0.5, 'sine', 0.35, 660);
+      events.push({ type: 'extract', worth: state.worth });
+      goHome('extract'); return;
+    }
+  }
+
+  // timers
+  for (const s of state.seams) if (s.shake > 0) s.shake -= dt;
+  state.hurt = Math.max(0, state.hurt - dt * 1.6); state.shake = Math.max(0, state.shake - dt * 3);
+  if (state.toastT > 0) state.toastT -= dt;
+  updateFx(dt);
+  if (state.hp <= 0) die(state.o2 <= 0 ? 'Out of oxygen' : 'Killed by the rock');
+}
+function makeNoise(amount, burst, radius) { // sleeping creatures within earshot hear it
+  const p = state.p, hear = radius || tune.hear_radius;
+  for (const c of state.creatures) {
+    if (c.st !== 'sleep') continue;
+    const d = dist(c.x, c.z, p.x, p.z);
+    if (d < hear) c.noise += amount * (1 - 0.6 * d / hear);
+  }
+}
+function hurtPlayer(dmg) {
+  state.hp -= dmg; state.hurt = 1; state.shake = 1;
+  tone(120, 0.25, 'square', 0.45, 60); crunch(0.15, 0.3);
+  events.push({ type: 'hurt', dmg });
+}
+function updateCreatures(dt, playerSafe) {
+  const p = state.p; let stir = 0;
+  for (let i = 0; i < state.creatures.length; i++) {
+    const c = state.creatures[i], den = DENS[i];
+    const d = dist(c.x, c.z, p.x, p.z);
+    c.cd = Math.max(0, c.cd - dt);
+    if (c.st === 'sleep') {
+      c.noise = Math.max(0, c.noise - tune.noise_decay * dt);
+      if (c.kind === 'spitter' && d < tune.spitter_see && !playerSafe) c.noise = tune.wake_noise;
+      if (c.noise >= tune.wake_noise) {
+        c.st = c.kind === 'burrower' ? 'chase' : 'awake'; c.t = 0; c.noise = 0; c.stuns = 0; c.cd = 1;
+        tone(c.kind === 'burrower' ? 90 : 240, 0.5, 'sawtooth', 0.35, c.kind === 'burrower' ? 300 : 120);
+        events.push({ type: 'wake', kind: c.kind });
+      } else if (d < tune.hear_radius) stir = Math.max(stir, c.noise / tune.wake_noise);
+      continue;
+    }
+    c.face = Math.atan2(p.x - c.x, p.z - c.z);
+    if (c.kind === 'burrower') {
+      if (c.st === 'chase') {
+        c.t += dt; c.hit = Math.max(0, c.hit - dt * 0.5);
+        const far = dist(c.x, c.z, den.x, den.z) > tune.burrower_leash;
+        if (c.t > tune.burrower_chase_time || far || playerSafe) { c.st = 'return'; continue; }
+        if (d > tune.burrower_reach * 0.8) {
+          let nx = c.x + (p.x - c.x) / d * tune.burrower_speed * dt, nz = c.z + (p.z - c.z) / d * tune.burrower_speed * dt;
+          [nx, nz] = pushOut(nx, nz, SOLIDS, 0.9);
+          if (mask(nx, nz) > 0.03 && dist(nx, nz, SHIP.x, SHIP.z) > tune.safe_radius) { c.x = nx; c.z = nz; }
+        }
+        if (d < tune.burrower_reach && c.cd <= 0) { c.st = 'windup'; c.t = tune.burrower_windup; tone(200, 0.2, 'square', 0.2, 400); }
+      } else if (c.st === 'windup') {
+        c.t -= dt;
+        if (c.t <= 0) {
+          if (d < tune.burrower_reach + 0.5) hurtPlayer(tune.burrower_bite);
+          c.st = 'chase'; c.t = 0; c.cd = tune.burrower_cooldown;
+        }
+      } else if (c.st === 'stun') {
+        c.t -= dt;
+        if (c.t <= 0) { c.st = c.stuns >= tune.stuns_to_flee ? 'return' : 'chase'; c.t = 0; }
+      } else if (c.st === 'return') {
+        const dh = dist(c.x, c.z, den.x, den.z);
+        c.face = Math.atan2(den.x - c.x, den.z - c.z);
+        if (dh < 0.3) { c.x = den.x; c.z = den.z; c.st = 'sleep'; c.noise = 0; }
+        else { c.x += (den.x - c.x) / dh * tune.burrower_speed * dt; c.z += (den.z - c.z) / dh * tune.burrower_speed * dt; }
+      }
+    } else { // spitter: rooted, lobs a glob at where you stand
+      if (d > tune.spitter_range || playerSafe) { c.st = 'sleep'; c.noise = 0; continue; }
+      if (c.cd <= 0) {
+        c.cd = tune.spitter_interval;
+        state.globs.push({ x0: c.x, z0: c.z, x1: p.x, z1: p.z, t: 0, T: tune.spitter_flight });
+        tone(420, 0.25, 'sine', 0.25, 160);
+      }
+    }
+  }
+  for (let i = state.globs.length - 1; i >= 0; i--) {
+    const g = state.globs[i]; g.t += dt;
+    if (g.t >= g.T) {
+      if (dist(g.x1, g.z1, p.x, p.z) < tune.spitter_splash) hurtPlayer(tune.spitter_damage);
+      else crunch(0.12, 0.2);
+      for (let k = 0; k < 6; k++) spawnFlake(g.x1, height(g.x1, g.z1) + 0.3, g.z1, true);
+      state.globs.splice(i, 1);
+    }
+  }
+  if (stir > 0.25 && Math.floor(state.t / 0.55) !== Math.floor((state.t - dt) / 0.55)) tone(38 + stir * 26, 0.3, 'triangle', 0.2 + stir * 0.3);
+  state.stir = stir;
+}
+
+// ---- Home ---------------------------------------------------------------------------------
+function updateHome(dt) {
+  const p = state.p, h = state.home;
+  state.t += dt; look(dt);
+  if (h.bannerT > 0) h.bannerT -= dt;
+  if (h.mode === 'unpack') { // the haul lands in the stash one ore at a time
+    h.qt -= dt;
+    if (pressed('Enter')) h.qt = -99;
+    while (h.queue.length && h.qt <= 0) {
+      const k = h.queue.shift(); save.stash[k]++; h.counted += oreValue(k);
+      tone(520 + ORE_KEYS.indexOf(k) * 150 + (h.counted % 7) * 12, 0.16, 'triangle', 0.28);
+      h.qt += 0.2;
+    }
+    if (!h.queue.length) {
+      h.mode = 'walk'; writeSave();
+      banner(`Haul ${h.haul}   ·   Best haul ${save.best}   ·   Stash worth ${stashWorth()}`, 7);
+      tone(660, 0.4, 'sine', 0.3, 990);
+    }
+    return;
+  }
+  if (h.mode === 'bench') {
+    if (pressed('Digit1') && canCraftDrill()) {
+      save.stash.glint -= tune.drill2_glint; save.stash.ember -= tune.drill2_ember; save.stash.verdite -= tune.drill2_verdite;
+      save.drill2++; save.useDrill2 = true;
+      if (!save.goal) { save.goal = true; banner('Better Drill crafted. Sunstone in the Deep is yours to cut. Now: how rich can you get?', 9); }
+      else banner('Better Drill crafted.', 4);
+      writeSave(); crunch(0.25, 0.35); tone(440, 0.5, 'triangle', 0.3, 880); events.push({ type: 'craft', item: 'drill2' });
+    }
+    if (pressed('Digit2') && canCraftCan()) {
+      save.stash.glint -= tune.canister_glint; save.stash.ember -= tune.canister_ember; save.canisters++;
+      writeSave(); tone(520, 0.3, 'sine', 0.3, 780); banner('Oxygen canister crafted.', 3); events.push({ type: 'craft', item: 'canister' });
+    }
+    if (pressed('KeyE') || pressed('Escape') || pressed('KeyP')) h.mode = 'walk';
+    return;
+  }
+  const w = wish();
+  if (w) {
+    let nx = p.x + w.x * tune.walk_speed * dt, nz = p.z + w.z * tune.walk_speed * dt;
+    nx = clamp(nx, -ROOM.w / 2 + 1.5, ROOM.w / 2 - 1.5); nz = clamp(nz, -ROOM.d / 2 + 1.6, ROOM.d / 2 - 1.2);
+    p.x = nx; p.z = nz; p.bob += tune.walk_speed * dt;
+  }
+  // the station in front of you
+  const fx_ = -Math.sin(p.yaw), fz_ = -Math.cos(p.yaw);
+  h.near = '';
+  let bestD = 4.2;
+  for (const s of STATIONS) {
+    const dx = s.x - p.x, dz = s.z - p.z, d = Math.hypot(dx, dz);
+    if (d < bestD && (dx * fx_ + dz * fz_) / (d || 1) > 0.35) { bestD = d; h.near = s.id; }
+  }
+  if (pressed('KeyE') && h.near) {
+    if (h.near === 'bench') h.mode = 'bench';
+    else if (h.near === 'hatch') { tone(260, 0.5, 'sine', 0.3, 520); startRun(); }
+    else if (h.near === 'rack') {
+      if (save.drill2 > 0) { save.useDrill2 = !save.useDrill2; writeSave(); tone(500, 0.12, 'square', 0.2); }
+      else banner('No Better Drill on the rack yet. Craft one at the bench.', 3);
+    } else if (h.near === 'stash') banner(`Stash worth ${stashWorth()}   ·   Best haul ${save.best}   ·   Runs ${save.runs}`, 4);
+  }
+}
+
+// ---- Effects that are only looks: flakes and ore flying to the pack -----------------------
+const fx = [];
+function spawnFlake(x, y, z, danger) {
+  fx.push({ kind: 'flake', x, y, z, vx: (rng() - 0.5) * 4, vy: 2 + rng() * 3, vz: (rng() - 0.5) * 4, t: 0, danger: !!danger });
+}
+function updateFx(dt) {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i]; f.t += dt;
+    if (f.kind === 'flake') { f.vy -= 9 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; if (f.t > 0.7) fx.splice(i, 1); }
+    else if (f.t > 0.45) fx.splice(i, 1);
+  }
+}
+
+// =========================================================================================
+// The 3D view. Stylised realism: textured, natural rock under a soft coloured sky. Ore is the
+// only glossy, saturated thing; hot magenta means danger and nothing else.
+// =========================================================================================
+const MAGENTA = 0xff2390;
+const G = { rockyMats: [], rockMeshes: [], crystalMeshes: [], homeShell: [] }; // every 3D object the view needs
+// Stylised realism: natural rock colours with a pastel cast, a rock texture and real shadows.
+let _rock = null;
+function rockTex() { // one tiling rock texture, drawn here: blotches, grain and a few fine cracks
+  if (_rock) return _rock;
+  const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
+  x.fillStyle = '#b6b6b6'; x.fillRect(0, 0, 512, 512); let sd = 7;
+  const r = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  for (let i = 0; i < 900; i++) {
+    const g = 120 + r() * 120 | 0, rad = 6 + r() * 46, bx = i * 97 % 512, by = i * 211 % 512;
+    x.fillStyle = `rgba(${g},${g},${g},0.10)`;
+    for (const ox of [0, 512, -512]) for (const oy of [0, 512, -512]) { x.beginPath(); x.arc(bx + ox, by + oy, rad, 0, 7); x.fill(); }
+  }
+  for (let i = 0; i < 9000; i++) { const g = 70 + r() * 180 | 0; x.fillStyle = `rgba(${g},${g},${g},0.3)`; x.fillRect(r() * 512, r() * 512, 1 + r() * 2.5, 1 + r() * 2.5); }
+  x.strokeStyle = 'rgba(70,70,70,0.22)';
+  for (let i = 0; i < 14; i++) {
+    x.lineWidth = 0.6 + r() * 1.2; x.beginPath(); let px = r() * 512, py = r() * 512, a = r() * 6.28; x.moveTo(px, py);
+    for (let k = 0; k < 9; k++) { a += (r() - 0.5) * 0.9; px += Math.cos(a) * 22; py += Math.sin(a) * 22; x.lineTo(px, py); } x.stroke();
+  }
+  _rock = new THREE.CanvasTexture(c); _rock.wrapS = _rock.wrapT = THREE.RepeatWrapping; _rock.colorSpace = THREE.SRGBColorSpace; return _rock;
+}
+const _nat = new THREE.Color();
+function natural(c) { // pull a colour toward natural stone, keeping some of its cast
+  const l = (c.r + c.g + c.b) / 3; _nat.setHex(0x7d766f).multiplyScalar(0.45 + l * 0.9); return c.lerp(_nat, 0.3);
+}
+function pastel(hex, rocky) { // rocky: how many times the rock texture repeats across the shape
+  const m = new THREE.MeshStandardMaterial({ color: natural(new THREE.Color(hex)), roughness: rocky ? 0.95 : 0.55, metalness: rocky ? 0 : 0.1 });
+  if (rocky) { const t = rockTex().clone(); t.needsUpdate = true; t.repeat.set(rocky, rocky * 0.7); m.map = t; m.bumpMap = t; m.bumpScale = 1.0; m.userData.rep = rocky; G.rockyMats.push(m); }
+  return m;
+}
+function smoothNormals(g) { // one normal per place, so a displaced shape shades as one smooth surface
+  g.computeVertexNormals();
+  const p = g.attributes.position, n = g.attributes.normal, sum = new Map();
+  const key = i => `${Math.round(p.getX(i) * 200)},${Math.round(p.getY(i) * 200)},${Math.round(p.getZ(i) * 200)}`;
+  for (let i = 0; i < p.count; i++) { const k = key(i), v = sum.get(k) || [0, 0, 0]; v[0] += n.getX(i); v[1] += n.getY(i); v[2] += n.getZ(i); sum.set(k, v); }
+  for (let i = 0; i < p.count; i++) { const v = sum.get(key(i)), l = Math.hypot(v[0], v[1], v[2]) || 1; n.setXYZ(i, v[0] / l, v[1] / l, v[2] / l); }
+  return g;
+}
+function boulderGeo(r, k, tall) { // a rounded, lumpy rock; tall ones taper to a soft point
+  const g = new THREE.SphereGeometry(r, 28, 20), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const d = 1 + 0.16 * Math.sin(x * 1.7 / r * 2 + k) * Math.cos(z * 1.9 / r * 2 + k * 1.3) + 0.09 * Math.sin(y * 4.1 / r + k * 2.1) + 0.05 * Math.sin((x + z) * 7 / r + k);
+    x *= d; y *= d; z *= d;
+    if (tall) { const u = (y / r + 1) / 2, w = 1 - 0.82 * u * u; x *= w; z *= w; y = (u * 2 - 1) * r * tall; }
+    p.setXYZ(i, x, y, z);
+  }
+  return smoothNormals(g);
+}
+let _gem = null;
+function gemGeo() { // a cut crystal: six sides, a crown and a point. The only faceted shape in the world
+  return _gem || (_gem = new THREE.LatheGeometry([[0, -1], [0.5, -0.35], [0.72, 0.2], [0.5, 0.72], [0, 1]].map(v => new THREE.Vector2(v[0] + 0.0001, v[1])), 6));
+}
+function gloss(hex) { return new THREE.MeshPhysicalMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.5, roughness: 0.12, metalness: 0, clearcoat: 1, flatShading: true }); }
+function skyDome(top, mid, low) {
+  const g = new THREE.SphereGeometry(600, 24, 12), c = [], a = new THREE.Color(top), b = new THREE.Color(mid), d = new THREE.Color(low), o = new THREE.Color();
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 600;
+    if (y > 0) o.lerpColors(b, a, Math.pow(y, 0.6)); else o.lerpColors(b, d, Math.min(1, -y * 2));
+    c.push(o.r, o.g, o.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+  return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }));
+}
+function groundColor(x, z, h, m, out) {
+  const peach = groundColor.a || (groundColor.a = [new THREE.Color(0xf4dcc9), new THREE.Color(0xd9cfee), new THREE.Color(0x9fadd9), new THREE.Color(0xb3a2c6), new THREE.Color(0xfff4e4)]);
+  const u = clamp((x + 110) / 250, 0, 1);
+  if (u < 0.4) out.lerpColors(peach[0], peach[1], u / 0.4); else out.lerpColors(peach[1], peach[2], (u - 0.4) / 0.6);
+  const v = 0.94 + 0.06 * Math.sin(x * 0.9 + z * 0.7) + 0.03 * Math.sin(h * 3);
+  out.multiplyScalar(v);
+  const pad = 1 - sstep(8, 13, Math.hypot(x - SHIP.x, z - SHIP.z));
+  if (pad > 0) out.lerp(peach[4], pad * 0.8);
+  if (m < 0.03) out.lerp(peach[3], clamp((0.03 - m) * 7, 0, 1));
+  return out;
+}
+function buildTerrain() {
+  const nx = 300, nz = 190, x0 = -135, z0 = -91, cs = 1, pos = [], col = [], ms = [], idx = [], uvs = [], c = new THREE.Color();
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+    const x = x0 + i * cs, z = z0 + j * cs, h = height(x, z), m = mask(x, z);
+    pos.push(x, h, z); groundColor(x, z, h, m, c); natural(c); col.push(c.r, c.g, c.b); ms.push(m); uvs.push(x / 9, z / 9);
+  }
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const a = j * (nx + 1) + i, b = a + 1, d = a + nx + 1, e = d + 1;
+    if (Math.max(ms[a], ms[b], ms[d], ms[e]) > -0.7) idx.push(a, d, b, b, d, e);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const tm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: rockTex(), bumpMap: rockTex(), bumpScale: 1.1 })); tm.receiveShadow = true; return tm;
+}
+function makeBurrower() { // low, wide, many-legged: a rock that walks
+  const g = new THREE.Group(), body = pastel(0xa99bb8, 2), glow = new THREE.MeshBasicMaterial({ color: MAGENTA });
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), body); shell.scale.set(1.25, 0.55, 1.6); shell.position.y = 0.55; g.add(shell);
+  const legs = [];
+  for (let i = 0; i < 6; i++) {
+    const side = i % 2 ? 1 : -1, row = Math.floor(i / 2) - 1;
+    const leg = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.3, 14), body);
+    leg.position.set(side * 1.25, 0.35, row * 0.95); leg.rotation.z = side * 2.2; g.add(leg); legs.push(leg);
+  }
+  const jaws = [];
+  for (const side of [-1, 1]) {
+    const j = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.95, 14), glow);
+    j.position.set(side * 0.42, 0.42, 1.75); j.rotation.x = Math.PI / 2; j.rotation.z = side * -0.35; g.add(j); jaws.push(j);
+  }
+  for (let i = 0; i < 3; i++) {
+    const slit = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 1.3 - i * 0.3, 4, 10), glow); slit.rotation.z = Math.PI / 2;
+    slit.position.set(0, 1.05 - i * 0.04, 0.5 - i * 0.6); g.add(slit);
+  }
+  g.traverse(o => { o.castShadow = true; });
+  return { g, glow, legs, jaws, shell };
+}
+function makeSpitter() { // tall and thin: a stalk with a bulb head and a frill
+  const g = new THREE.Group(), body = pastel(0xa99bb8, 2), glow = new THREE.MeshBasicMaterial({ color: MAGENTA });
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.42, 3.2, 20), body); stalk.position.y = 1.6; g.add(stalk);
+  const base = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.7, 24), body); base.position.y = 0.3; g.add(base);
+  const head = new THREE.Group(); head.position.y = 3.3; g.add(head);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.72, 24, 16), body); head.add(bulb);
+  const mouth = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.8, 20), glow); mouth.position.set(0, 0.25, 0.55); mouth.rotation.x = 0.9; head.add(mouth);
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2, fin = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.1, 12), glow);
+    fin.position.set(Math.sin(a) * 0.75, -0.35, Math.cos(a) * 0.75); fin.rotation.set(Math.cos(a) * 1.9, 0, -Math.sin(a) * 1.9); head.add(fin);
+  }
+  g.traverse(o => { o.castShadow = true; });
+  return { g, glow, head, stalk };
+}
+function makeDrill(better) { // held in the right hand
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.3, 8, 20), pastel(better ? 0x9fd9cf : 0xf1dc9a)); body.rotation.x = Math.PI / 2; g.add(body);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, 0.08), pastel(0x8c86a8)); grip.position.set(0, -0.14, 0.1); g.add(grip);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 24), pastel(0xcfc9e0)); collar.rotation.x = Math.PI / 2; collar.position.z = -0.25; g.add(collar);
+  const bit = new THREE.Mesh(new THREE.ConeGeometry(better ? 0.085 : 0.07, better ? 0.44 : 0.32, 20), pastel(better ? 0xe8e4f4 : 0xbdb7d0));
+  bit.rotation.x = -Math.PI / 2; bit.position.z = better ? -0.5 : -0.43; g.add(bit);
+  if (better) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.12), pastel(0xcfc9e0)); fin.position.z = -0.05; g.add(fin); }
+  return { g, bit };
+}
+function crystal(type, size) {
+  const m = new THREE.Mesh(gemGeo(), G.oreMat[type]); m.scale.set(size * 1.25, size * 1.9, size * 1.25); m.userData.s = size * 1.25; m.castShadow = true; G.crystalMeshes.push(m); return m;
+}
+function buildView() {
+  if (!renderer) return;
+  G.oreMat = {}; for (const k of ORE_KEYS) G.oreMat[k] = gloss(ORE[k].color);
+
+  // ---- the asteroid ----
+  const w = G.world = new THREE.Scene();
+  w.fog = new THREE.Fog(0xd9cfe0, 90, 380);
+  w.add(skyDome(0x3d4f9e, 0xe9c9c0, 0x8f86b8));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  const planet = new THREE.Mesh(new THREE.SphereGeometry(70, 48, 32), new THREE.MeshStandardMaterial({ color: 0xbfe3d8, roughness: 1, fog: false })); planet.position.set(180, 150, -360); w.add(planet);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(105, 5, 8, 96), new THREE.MeshBasicMaterial({ color: 0xf6e9c9, fog: false })); ring.position.copy(planet.position); ring.rotation.set(1.25, 0.3, 0); w.add(ring);
+  w.add(new THREE.HemisphereLight(0xffffff, 0xc9b9d8, 0.85));
+  const sun = G.sun = new THREE.DirectionalLight(0xfff1dc, 3.0); sun.position.set(-70, 45, 50); w.add(sun); w.add(sun.target);
+  if (!CHEAP) {
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera; sc.left = -60; sc.right = 60; sc.top = 60; sc.bottom = -60; sc.near = 1; sc.far = 260;
+    sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.35;
+  }
+  G.terrain = buildTerrain(); w.add(G.terrain);
+  const rockMats = [pastel(0xe6cdbd, 3), pastel(0xcbbfe6, 3), pastel(0x93a0cf, 3)];
+  for (const r of ROCKS) {
+    const u = clamp((r.x + 110) / 250, 0, 1), mat = rockMats[u < 0.3 ? 0 : u < 0.72 ? 1 : 2];
+    const tall = r.tall > 2;
+    const m = new THREE.Mesh(boulderGeo(r.r, r.x * 0.7 + r.z, tall ? r.tall * 0.8 : 0), mat);
+    const y = height(r.x, r.z);
+    if (tall) m.position.set(r.x, y + r.r * r.tall * 0.72, r.z); else { m.scale.y = r.tall * 0.8; m.position.set(r.x, y + r.r * 0.25, r.z); }
+    m.rotation.y = r.x * 0.37; m.castShadow = true; w.add(m); G.rockMeshes.push(m);
+  }
+  { // the arch's lintel, across its two pillars
+    const lint = new THREE.Mesh(boulderGeo(1, 3.3, 0), rockMats[1]); lint.scale.set(9.5, 1.5, 2.2);
+    lint.position.set(-23, height(-23, -6) + 8.2, -6); lint.rotation.y = Math.atan2(14, 8); lint.castShadow = true; w.add(lint); G.lint = lint;
+  }
+  // the seams
+  G.seams = SEAMS.map((s, i) => {
+    const g = new THREE.Group(), y = height(s.x, s.z); g.position.set(s.x, y, s.z);
+    const hard = s.type === 'sunstone';
+    const mound = new THREE.Mesh(boulderGeo(1.35, i * 1.9, 0), pastel(hard ? 0x7f89b8 : 0xc7b9d6, 2)); mound.castShadow = true; mound.scale.y = 0.62; mound.position.y = 0.2; mound.rotation.y = i; g.add(mound);
+    const bits = [];
+    for (let k = 0; k < s.n; k++) {
+      const a = k / s.n * Math.PI * 2 + i, c = crystal(s.type, 0.3 + (k % 3) * 0.06);
+      c.position.set(Math.sin(a) * 0.62, 0.95 + (k % 2) * 0.14, Math.cos(a) * 0.62);
+      c.rotation.set(Math.cos(a) * 0.55, a, -Math.sin(a) * 0.55); g.add(c); bits.push(c);
+    }
+    w.add(g); return { g, bits };
+  });
+  // the creatures
+  G.creatures = DENS.map(d => { const c = d.kind === 'burrower' ? makeBurrower() : makeSpitter(); w.add(c.g); return c; });
+  // globs and the rings that show where they land
+  G.globs = []; G.rings = [];
+  for (let i = 0; i < 8; i++) {
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), new THREE.MeshBasicMaterial({ color: MAGENTA })); gl.visible = false; w.add(gl); G.globs.push(gl);
+    const rg = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 48), new THREE.MeshBasicMaterial({ color: MAGENTA, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
+    rg.rotation.x = -Math.PI / 2; rg.visible = false; w.add(rg); G.rings.push(rg);
+  }
+  // the ship and its beacon
+  const ship = new THREE.Group(); ship.position.set(SHIP.x, height(SHIP.x, SHIP.z), SHIP.z);
+  const hull = new THREE.Mesh(new THREE.CapsuleGeometry(2.6, 3.6, 12, 32), pastel(0xfff3e3)); hull.position.y = 5.2; ship.add(hull);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(2.62, 0.3, 12, 40), pastel(0x9fd9cf)); band.rotation.x = Math.PI / 2; band.position.y = 5.6; ship.add(band);
+  const port = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 16), pastel(0xaecbf0)); port.position.set(2.2, 6.6, 0); ship.add(port);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.6, 1.7), pastel(0x7c7a9c)); door.position.set(2.5, 3.4, 0); ship.add(door);
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 1.9), pastel(0xcfc9e0)); ramp.position.set(3.9, 1.0, 0); ramp.rotation.z = -0.5; ship.add(ramp);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2 + 1.05, leg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.4, 0.35), pastel(0xcfc9e0));
+    leg.position.set(Math.cos(a) * 2.9, 1.5, Math.sin(a) * 2.9); leg.rotation.set(Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4); ship.add(leg);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.4, 1.6), pastel(0xf3b8a8)); fin.position.set(Math.cos(a) * 2.9, 3.6, Math.sin(a) * 2.9); fin.rotation.y = -a; ship.add(fin);
+  }
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 6, 5), pastel(0xcfc9e0)); pole.position.y = 12; ship.add(pole);
+  G.beacon = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })); G.beacon.position.y = 15.2; ship.add(G.beacon);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 160, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xe9fbff, transparent: true, opacity: 0.32, fog: false, depthWrite: false }));
+  beam.position.y = 95; ship.add(beam); ship.traverse(o => { if (o !== beam && o !== G.beacon) o.castShadow = true; }); w.add(ship);
+  // flakes and flying ore
+  G.flakes = []; G.flakeMat = pastel(0xe9dcec); G.flakeBad = new THREE.MeshBasicMaterial({ color: MAGENTA });
+  for (let i = 0; i < 48; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), G.flakeMat); f.visible = false; w.add(f); G.flakes.push(f); }
+  G.fly = []; for (let i = 0; i < 6; i++) { const f = new THREE.Mesh(gemGeo(), G.oreMat.glint); f.visible = false; w.add(f); G.fly.push(f); }
+  // the camera and the drill in hand
+  G.cam = new THREE.PerspectiveCamera(72, W / H, 0.08, 900); G.cam.rotation.order = 'YXZ'; w.add(G.cam);
+  G.drills = [makeDrill(false), makeDrill(true)];
+  for (const d of G.drills) { d.g.scale.setScalar(0.8); d.g.position.set(0.44, -0.36, -0.7); d.g.rotation.set(0.1, 0.3, 0); G.cam.add(d.g); }
+
+  // ---- home ----
+  const h = G.home = new THREE.Scene();
+  G.homeHemi = new THREE.HemisphereLight(0xffffff, 0xf1e6ea, 2.0); h.add(G.homeHemi);
+  const hl = new THREE.DirectionalLight(0xfff4e2, 2.2); hl.position.set(3, 8, 5); h.add(hl);
+  h.background = new THREE.Color(0xe7e0f2);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, 0.4, ROOM.d), pastel(0xf5e6d6)); floor.position.y = -0.2; h.add(floor); G.homeShell.push(floor);
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, 0.4, ROOM.d), pastel(0xf7f1f8)); ceil.position.y = 4.42; ceil.scale.y = 1; h.add(ceil);
+  const wallMat = pastel(0xece6f6);
+  for (const [x, z, sx, sz] of [[0, -ROOM.d / 2, ROOM.w, 0.4], [0, ROOM.d / 2, ROOM.w, 0.4], [-ROOM.w / 2, 0, 0.4, ROOM.d], [ROOM.w / 2, 0, 0.4, ROOM.d]]) {
+    const wl = new THREE.Mesh(new THREE.BoxGeometry(sx, 5, sz), wallMat); wl.position.set(x, 2.5, z); h.add(wl); G.homeShell.push(wl);
+  }
+  for (let i = 0; i < 5; i++) { // floor stripes toward the stash
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.9), pastel(0xe7d2c6)); st.position.set(0, 0.02, 3.4 - i * 1.5); h.add(st);
+  }
+  // the stash wall: four bins, one per ore, that fill as you get rich
+  G.bins = {};
+  ORE_KEYS.forEach((k, i) => {
+    const x = -5.25 + i * 3.5, bin = new THREE.Group(); bin.position.set(x, 0, -5.0);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.2, 0.2), pastel(0xc9c0e2)); back.position.set(0, 1.7, -0.5); bin.add(back);
+    for (const y of [0.25, 1.35, 2.45]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 1.1), pastel(0xb9aed6)); sh.position.set(0, y, 0); bin.add(sh); }
+    for (const sx of [-1.45, 1.45]) { const sd = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 1.1), pastel(0xb9aed6)); sd.position.set(sx, 1.7, 0); bin.add(sd); }
+    const bits = [];
+    for (let n = 0; n < 30; n++) {
+      const c = crystal(k, 0.17), row = Math.floor(n / 10), col = n % 10;
+      c.position.set(-1.12 + (col % 5) * 0.56 + (col >= 5 ? 0.12 : 0), 0.63 + row * 1.1, col >= 5 ? -0.2 : 0.22);
+      c.rotation.set(0.2 * col, n, 0.15 * row); c.visible = false; bin.add(c); bits.push(c);
+    }
+    h.add(bin); G.bins[k] = bits;
+  });
+  // the bench
+  const bench = new THREE.Group(); bench.position.set(8.4, 0, 0);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 3.6), pastel(0xf0cdb4)); top.position.y = 1.1; bench.add(top);
+  for (const z of [-1.5, 1.5]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.2), pastel(0xc9a995)); lg.position.set(0, 0.5, z); bench.add(lg); }
+  const vice = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), pastel(0x9c97b8)); vice.position.set(0.1, 1.4, -1.1); bench.add(vice);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 3.2), pastel(0xb9aed6)); board.position.set(0.72, 2.6, 0); bench.add(board);
+  G.benchDrill = makeDrill(true).g; G.benchDrill.scale.setScalar(2.4); G.benchDrill.position.set(-0.1, 1.5, 0.5); G.benchDrill.rotation.y = 0.6; bench.add(G.benchDrill);
+  h.add(bench);
+  // the tool rack
+  const rack = new THREE.Group(); rack.position.set(-9.0, 0, 0);
+  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 3.6), pastel(0xb9aed6)); rb.position.set(0, 2.1, 0); rack.add(rb);
+  G.rackBasic = makeDrill(false).g; G.rackBasic.scale.setScalar(2.2); G.rackBasic.position.set(0.3, 2.4, 0.9); G.rackBasic.rotation.set(0, Math.PI / 2, -0.5); rack.add(G.rackBasic);
+  G.rackBetter = makeDrill(true).g; G.rackBetter.scale.setScalar(2.2); G.rackBetter.position.set(0.3, 2.4, -0.7); G.rackBetter.rotation.set(0, Math.PI / 2, -0.5); rack.add(G.rackBetter);
+  G.rackMark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 1.3), pastel(0x9fd9cf)); G.rackMark.position.set(0.12, 1.5, 0.9); rack.add(G.rackMark);
+  G.cans = []; for (let i = 0; i < 4; i++) { const cn = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.34, 8, 18), pastel(0xaecbf0)); cn.position.set(0.35, 0.32, -1.3 + i * 0.45); rack.add(cn); G.cans.push(cn); }
+  const rs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 2.4), pastel(0xb9aed6)); rs.position.set(0.3, 0.05, -0.6); rack.add(rs);
+  h.add(rack);
+  // the hatch
+  const hatch = new THREE.Group(); hatch.position.set(0, 0, 5.75);
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.28, 12, 40), pastel(0x9fd9cf)); frame.position.y = 1.9; hatch.add(frame);
+  const hd = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.16, 40), pastel(0x7c7a9c)); hd.rotation.x = Math.PI / 2; hd.position.y = 1.9; hatch.add(hd);
+  const win = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.2, 28), new THREE.MeshBasicMaterial({ color: 0x8ea4ea })); win.rotation.x = Math.PI / 2; win.position.y = 2.2; hatch.add(win);
+  h.add(hatch); G.hatch = hatch;
+  // wealth lamps: one lights for each step of stash worth
+  G.lamps = WEALTH_STEPS.map((_, i) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 14), new THREE.MeshBasicMaterial({ color: 0xcfc9e0 }));
+    m.position.set(-6.3 + i * 1.8, 3.9, -5.2); h.add(m); return m;
+  });
+  G.homeCam = new THREE.PerspectiveCamera(72, W / H, 0.08, 100); G.homeCam.rotation.order = 'YXZ'; h.add(G.homeCam);
+  G.homeDrills = [makeDrill(false), makeDrill(true)];
+  for (const d of G.homeDrills) { d.g.scale.setScalar(0.8); d.g.position.set(0.44, -0.38, -0.7); d.g.rotation.set(0.1, 0.3, 0); G.homeCam.add(d.g); }
+
+  // ---- figures: each creature side by side ----
+  const f = G.fig = new THREE.Scene(); f.background = new THREE.Color(0xe9e2f2);
+  f.add(new THREE.HemisphereLight(0xffffff, 0xc9b9d8, 1.5)); const fl = new THREE.DirectionalLight(0xfff1dc, 2); fl.position.set(-4, 8, 6); f.add(fl);
+  const fg = new THREE.Mesh(new THREE.BoxGeometry(30, 0.2, 12), pastel(0xd9cfee)); fg.position.y = -0.1; f.add(fg);
+  const fb = makeBurrower(); fb.g.position.set(-3.2, 0.25, 0); fb.g.rotation.y = 0.5; f.add(fb.g);
+  const fs = makeSpitter(); fs.g.position.set(3.2, 0, 0); fs.g.rotation.y = -0.4; f.add(fs.g);
+  G.figs = [fb, fs];
+  G.figCam = new THREE.PerspectiveCamera(40, W / H, 0.1, 100); G.figCam.position.set(0, 2.6, 12); G.figCam.lookAt(0, 1.7, 0);
+}
+// ---- Models and textures from free packs (assets/*.js; where each came from is in
+// assets/provenance.yaml). They swap in over the shapes built above once they have loaded, so
+// the game still plays if a pack is missing.
+function loadPacks() {
+  const A = window.ASSETS; if (!A || !renderer) return;
+  const TL = new THREE.TextureLoader();
+  const tex = (key, rx, ry, srgb) => { const t = TL.load(A[key]); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const buf = b64 => { const b = atob(b64), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; };
+  const fail = what => e => events.push({ type: 'pack-failed', what, why: String(e && e.message || e) });
+  const swap = (old, m) => { m.castShadow = true; m.receiveShadow = true; old.parent.add(m); old.parent.remove(old); return m; };
+  // the ground and every rocky shape: Poly Haven's rock surfaces
+  if (A.ground_diff) {
+    const tm = G.terrain.material; tm.map = tex('ground_diff', 1, 1, true); tm.normalMap = tex('ground_nor', 1, 1); tm.bumpMap = null; tm.color.setScalar(1.9); tm.needsUpdate = true;
+    for (const m of G.rockyMats) { const r = m.userData.rep; m.map = tex('rock_diff', r * 0.6, r * 0.45, true); m.normalMap = tex('rock_nor', r * 0.6, r * 0.45); m.bumpMap = null; m.color.multiplyScalar(1.8); m.needsUpdate = true; }
+  }
+  // boulders: the handpainted rocks
+  if (A.hrock1_obj) try {
+    const ol = new THREE.OBJLoader(), hg = [], hm = [];
+    for (let i = 1; i <= 5; i++) {
+      let g = null; ol.parse(A['hrock' + i + '_obj']).traverse(c => { if (c.isMesh && !g) g = c.geometry; });
+      g.computeBoundingSphere(); const c = g.boundingSphere.center, k = 1 / g.boundingSphere.radius; g.translate(-c.x, -c.y, -c.z); g.scale(k, k, k);
+      hg.push(g); hm.push(new THREE.MeshStandardMaterial({ map: tex('hrock' + i + '_diff', 1, 1, true), normalMap: tex('hrock' + i + '_nor', 1, 1), roughness: 0.95 }));
+    }
+    ROCKS.forEach((r, i) => {
+      if (r.tall > 2) return;
+      const m = new THREE.Mesh(hg[i % 5], hm[i % 5]); m.position.set(r.x, height(r.x, r.z) + r.r * 0.5, r.z);
+      m.scale.set(r.r * 1.2, r.r * 1.1 * clamp(r.tall, 0.8, 1.3), r.r * 1.2); m.rotation.y = i * 1.3; G.rockMeshes[i] = swap(G.rockMeshes[i], m);
+    });
+  } catch (e) { fail('handpainted rocks')(e); }
+  // every other boulder: Elijah Cobden's stylised rocks (CC-BY), with Poly Haven's rock colour
+  if (A.crock1_fbx) try {
+    const blank = new THREE.LoadingManager(); // the FBX files name textures that are not shipped: give them a blank pixel
+    blank.setURLModifier(u => /^data:/.test(u) ? u : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+    const fl = new THREE.FBXLoader(blank), cg = [];
+    for (let i = 1; i <= 4; i++) {
+      const mat = new THREE.MeshStandardMaterial({ map: tex('rock_diff', 2, 2, true), normalMap: tex('crock' + i + '_nor', 1, 1), roughness: 0.95, color: new THREE.Color(1.15, 1.08, 1.02) });
+      const root = fl.parse(buf(A['crock' + i + '_fbx']), ''); root.updateWorldMatrix(true, true);
+      root.traverse(c => {
+        if (!c.isMesh) return;
+        const g = c.geometry.clone(); g.applyMatrix4(c.matrixWorld); g.computeBoundingSphere();
+        const o = g.boundingSphere.center, k = 1 / g.boundingSphere.radius; g.translate(-o.x, -o.y, -o.z); g.scale(k, k, k); cg.push({ g, mat });
+      });
+    }
+    let n = 0;
+    if (cg.length) ROCKS.forEach((r, i) => {
+      if (r.tall > 2 || i % 2 === 0) return;
+      const pick = cg[n++ % cg.length], m = new THREE.Mesh(pick.g, pick.mat); m.position.set(r.x, height(r.x, r.z) + r.r * 0.45, r.z);
+      m.scale.setScalar(r.r * 1.2); m.rotation.y = i * 2.1; G.rockMeshes[i] = swap(G.rockMeshes[i], m);
+    });
+    events.push({ type: 'pack-loaded', what: 'cobden rocks', shapes: cg.length });
+  } catch (e) { fail('cobden rocks')(e); }
+  // the arch and some of the Deep's spires: Poly Haven's scanned boulder
+  if (A.boulder_gltf) new THREE.GLTFLoader().parse(A.boulder_gltf, '', gl => {
+    let src = null; gl.scene.traverse(c => { if (c.isMesh && !src) src = c; });
+    src.updateWorldMatrix(true, false); const g = src.geometry.clone(); g.applyMatrix4(src.matrixWorld); g.computeBoundingBox();
+    const c = g.boundingBox.getCenter(new THREE.Vector3()), z = g.boundingBox.getSize(new THREE.Vector3());
+    g.translate(-c.x, -c.y, -c.z); g.scale(2 / z.x, 2 / z.y, 2 / z.z); // now fills a box from -1 to 1
+    const mat = src.material; let n = 0;
+    ROCKS.forEach((r, i) => {
+      if (r.tall <= 2 || (i > 12 && n++ % 2)) return;
+      const m = new THREE.Mesh(g, mat); m.position.set(r.x, height(r.x, r.z) + r.r * r.tall * 0.8, r.z);
+      m.scale.set(r.r * 1.05, r.r * r.tall, r.r * 1.05); m.rotation.y = i * 1.7; G.rockMeshes[i] = swap(G.rockMeshes[i], m);
+    });
+    const l = new THREE.Mesh(g, mat); l.position.copy(G.lint.position); l.rotation.copy(G.lint.rotation); l.scale.set(9.5, 1.6, 2.4); G.lint = swap(G.lint, l);
+  }, fail('boulder'));
+  // ore: the crystals pack's shapes, in the game's own glossy ore colours
+  if (A.crystals_glb) new THREE.GLTFLoader().parse(buf(A.crystals_glb), '', gl => {
+    const geos = [];
+    gl.scene.traverse(c => {
+      if (!c.isMesh) return;
+      const g = c.geometry.clone(); g.computeBoundingBox(); const b = g.boundingBox, h = b.max.y - b.min.y, k = 2 / h;
+      g.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, -(b.min.z + b.max.z) / 2); g.scale(k * 0.5, k * 0.62, k * 0.5); geos.push(g);
+    });
+    if (geos.length) G.crystalMeshes.forEach((m, i) => { m.geometry = geos[(i * 5) % geos.length]; });
+  }, fail('crystals'));
+  // the creatures: Squidle as the Burrower and Mushnub as the Spitter, from Quaternius's pack.
+  // Shapes only: the game moves them. They glow magenta as they stir and wake.
+  if (A.monsters) try {
+    const build = d => d.parts.map(p => {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p.pos, 3)); if (p.idx) g.setIndex(p.idx); g.computeVertexNormals();
+      return { g, color: p.color };
+    });
+    const sq = build(A.monsters.squidle), mu = build(A.monsters.mushnub);
+    const dress = (v, parts, h, y) => {
+      const old = new THREE.Group(); while (v.g.children.length) old.add(v.g.children[0]); // the built shape steps aside
+      v.mm = []; const body = new THREE.Group(); body.scale.setScalar(h); body.position.y = y;
+      for (const p of parts) {
+        const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(p.color[0], p.color[1], p.color[2]), roughness: 0.8, emissive: MAGENTA, emissiveIntensity: 0 });
+        const mesh = new THREE.Mesh(p.g, m); mesh.castShadow = true; body.add(mesh); v.mm.push(m);
+      }
+      v.g.add(body);
+    };
+    DENS.forEach((d, i) => { if (d.kind === 'burrower') dress(G.creatures[i], sq, 1.5, 0.15); else dress(G.creatures[i], mu, 3.4, 0); });
+    dress(G.figs[0], sq, 1.5, 0.15); dress(G.figs[1], mu, 3.4, 0);
+    for (const f of G.figs) for (const m of f.mm) m.emissiveIntensity = 0.25;
+  } catch (e) { fail('monsters')(e); }
+  // home: one room shell and the hatch's gate from Kenney's Modular Space Kit
+  if (A['k_room-wide']) {
+    const mgr = new THREE.LoadingManager(); mgr.setURLModifier(u => /colormap\.png$/.test(u) ? A.kenney_colormap : u);
+    const kl = new THREE.GLTFLoader(mgr);
+    const put = (name, x, y, z, ry, sc, then) => kl.parse(buf(A['k_' + name]), '', gl => {
+      const o = gl.scene; o.position.set(x, y, z); o.rotation.y = ry; o.scale.setScalar(sc); G.home.add(o); if (then) then(o);
+    }, fail('modular kit: ' + name));
+    put('room-wide', 0, 0, 0, 0, 1, () => { // the shell has open doorways: plain walls stay just outside it to close them
+      G.homeShell.forEach((m, i) => { if (i === 0) m.visible = false; else m.position.set(m.position.x * 1.045, m.position.y, m.position.z * 1.075); });
+    });
+    put('gate-door', 0, 0, 5.6, 0, 0.82, () => { G.hatch.visible = false; });
+    put('cables', -8.2, 0.02, 3.6, 0.6, 1.4);
+    put('template-detail', 8.6, 0, -4.6, 0, 0.9);
+    put('template-detail', -8.6, 0, -4.6, 0, 0.9);
+  }
+}
+const _c = { a: null, b: null };
+function tint(mat, k) { // a creature's glow: dull while it sleeps, hot magenta as it stirs and wakes
+  if (!_c.a) { _c.a = new THREE.Color(0x8d6d86); _c.b = new THREE.Color(MAGENTA); }
+  mat.color.lerpColors(_c.a, _c.b, clamp(k, 0, 1)); mat.userData.k = k;
+}
+function syncWorld() {
+  const p = state.p, t = state.t;
+  const sh = state.shake * 0.05;
+  if (scene === 'title') {
+    const a = t * 0.06; G.cam.position.set(-70 + Math.cos(a) * 70, 34, Math.sin(a) * 70); G.cam.lookAt(-50, 0, 0);
+  } else {
+    const bob = p.moving ? Math.sin(p.bob * 1.9) * 0.05 : 0;
+    G.cam.position.set(p.x, height(p.x, p.z) + 1.7 + bob, p.z);
+    G.cam.rotation.set(p.pitch + Math.sin(t * 50) * sh, p.yaw + Math.cos(t * 43) * sh, 0);
+  }
+  { const cx = G.cam.position.x, cz = G.cam.position.z; G.sun.position.set(cx - 70, 45, cz + 50); G.sun.target.position.set(cx, 0, cz); }
+  G.drills[0].g.visible = scene !== 'title' && state.drill === 1; G.drills[1].g.visible = scene !== 'title' && state.drill === 2;
+  const d = G.drills[state.drill - 1];
+  d.g.position.set(0.44 + (state.mining ? Math.sin(t * 90) * 0.006 : 0), -0.36 + (p.moving ? Math.sin(p.bob * 1.9) * 0.012 : 0), state.mining ? -0.76 : -0.7);
+  if (state.mining) d.bit.rotation.z += 0.6;
+  // seams
+  for (let i = 0; i < SEAMS.length; i++) {
+    const s = state.seams[i], v = G.seams[i], n = SEAMS[i].n;
+    for (let k = 0; k < n; k++) {
+      const c = v.bits[k]; c.visible = k < s.left;
+      const active = k === s.left - 1 && s.shake > 0, frac = s.prog / oreTough(SEAMS[i].type);
+      const pulse = 1 + 0.07 * Math.sin(t * 2.4 + i + k * 1.7);
+      const crack = active ? 1 - 0.25 * Math.floor(frac * 3) / 3 : 1; // it cracks in three steps
+      c.scale.set(c.userData.s * pulse * crack, c.userData.s * 1.52 * pulse, c.userData.s * pulse * crack);
+      c.rotation.y += active ? 0.25 : 0;
+    }
+    v.g.position.x = SEAMS[i].x + (s.shake > 0 ? Math.sin(t * 80) * 0.03 : 0);
+  }
+  G.oreMat.glint.emissiveIntensity = G.oreMat.ember.emissiveIntensity = G.oreMat.verdite.emissiveIntensity = G.oreMat.sunstone.emissiveIntensity = 0.45 + 0.15 * Math.sin(t * 2.2);
+  // creatures
+  for (let i = 0; i < state.creatures.length; i++) {
+    const c = state.creatures[i], v = G.creatures[i], y = height(c.x, c.z);
+    const stir = c.noise / tune.wake_noise;
+    if (c.kind === 'burrower') {
+      const up = c.st === 'sleep' ? 0 : 1;
+      v.g.position.set(c.x + (c.st === 'sleep' && stir > 0.3 ? Math.sin(t * 40) * 0.04 * stir : 0), y - 0.35 + up * 0.5 + (c.st === 'chase' ? Math.abs(Math.sin(t * 9)) * 0.1 : 0), c.z);
+      v.g.rotation.y = c.st === 'sleep' ? i * 1.3 : c.face;
+      v.g.rotation.x = c.st === 'windup' ? -0.55 : c.st === 'stun' ? 0.25 : 0;
+      for (let k = 0; k < 6; k++) { const side = k % 2 ? 1 : -1; v.legs[k].visible = up === 1; v.legs[k].rotation.z = side * (2.2 + (c.st === 'chase' || c.st === 'return' ? Math.sin(t * 14 + k) * 0.3 : 0)); }
+      for (const j of v.jaws) j.scale.setScalar(up ? 1 : 0.5);
+      tint(v.glow, c.st === 'sleep' ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : c.st === 'stun' ? 0.35 : 1);
+    } else {
+      const up = c.st === 'sleep' ? 0.42 + 0.2 * stir : 1;
+      v.g.position.set(c.x, y, c.z); v.g.scale.set(1, lerp(v.g.scale.y, up, 0.15), 1);
+      v.g.rotation.y = c.st === 'sleep' ? i : c.face;
+      v.head.rotation.x = c.st === 'sleep' ? 0.9 : -0.25 + (c.cd < 0.4 ? -0.5 : 0);
+      tint(v.glow, c.st === 'sleep' ? Math.max(0.3 + 0.12 * Math.sin(t * 1.5 + i), stir) : 1);
+    }
+    if (v.mm) for (const m of v.mm) m.emissiveIntensity = clamp((v.glow.userData.k || 0) - 0.42, 0, 1) * 1.6;
+  }
+  // globs
+  for (let i = 0; i < G.globs.length; i++) {
+    const g = state.globs[i], m = G.globs[i], r = G.rings[i];
+    m.visible = r.visible = !!g; if (!g) continue;
+    const u = g.t / g.T, x = lerp(g.x0, g.x1, u), z = lerp(g.z0, g.z1, u);
+    m.position.set(x, lerp(height(g.x0, g.z0) + 3.6, height(g.x1, g.z1) + 0.3, u) + Math.sin(u * Math.PI) * 7, z);
+    r.position.set(g.x1, height(g.x1, g.z1) + 0.25, g.z1); r.scale.setScalar(tune.spitter_splash);
+    r.material.opacity = 0.45 + 0.5 * u;
+  }
+  G.beacon.scale.setScalar(1 + 0.5 * Math.max(0, Math.sin(t * 3)));
+  // looks only
+  let fi = 0, oi = 0;
+  for (const m of G.flakes) m.visible = false; for (const m of G.fly) m.visible = false;
+  for (const f of fx) {
+    if (f.kind === 'flake' && fi < G.flakes.length) { const m = G.flakes[fi++]; m.visible = true; m.material = f.danger ? G.flakeBad : G.flakeMat; m.position.set(f.x, f.y, f.z); m.rotation.set(f.t * 9, f.t * 7, 0); }
+    else if (f.kind === 'ore' && oi < G.fly.length) {
+      const m = G.fly[oi++], u = Math.min(1, f.t / 0.45), e = u * u;
+      m.visible = true; m.material = G.oreMat[f.type];
+      m.position.set(lerp(f.x, G.cam.position.x, e), lerp(f.y, G.cam.position.y - 0.45, e) + Math.sin(u * Math.PI) * 0.7, lerp(f.z, G.cam.position.z, e));
+      m.rotation.y = f.t * 12; m.scale.setScalar(0.24 * (1 - 0.5 * u));
+    }
+  }
+}
+function syncHome() {
+  const p = state.p, t = state.t;
+  const bob = Math.sin(p.bob * 1.9) * 0.03;
+  G.homeCam.position.set(p.x, 1.7 + bob, p.z); G.homeCam.rotation.set(p.pitch, p.yaw, 0);
+  G.homeDrills[0].g.visible = !save.useDrill2 || save.drill2 <= 0; G.homeDrills[1].g.visible = !G.homeDrills[0].g.visible;
+  for (const k of ORE_KEYS) { const n = Math.min(30, save.stash[k]); G.bins[k].forEach((c, i) => { c.visible = i < n; }); }
+  const worth = stashWorth();
+  G.lamps.forEach((m, i) => { m.material.color.setHex(worth >= WEALTH_STEPS[i] ? ORE[ORE_KEYS[i % 4]].color : 0xcfc9e0); m.scale.setScalar(worth >= WEALTH_STEPS[i] ? 1.3 + 0.1 * Math.sin(t * 2 + i) : 1); });
+  G.homeHemi.intensity = 1.9 + 0.7 * Math.min(1, worth / WEALTH_STEPS[WEALTH_STEPS.length - 1]);
+  G.rackBetter.visible = save.drill2 > 0; G.benchDrill.visible = canCraftDrill();
+  G.benchDrill.rotation.y = t * 0.8;
+  G.rackMark.position.z = save.useDrill2 && save.drill2 > 0 ? -0.7 : 0.9;
+  G.cans.forEach((c, i) => { c.visible = i < save.canisters; });
+}
+
+// =========================================================================================
+// The HUD: every piece drawn here, in code.
+// =========================================================================================
+function plate(x, y, w, h, a = 0.72) { ctx.fillStyle = `rgba(27,29,51,${a})`; rr(x, y, w, h, 10); ctx.fill(); }
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function text(s, x, y, size, c, align = 'center', weight = '') {
+  ctx.fillStyle = c; ctx.font = `${weight} ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y);
+}
+function label(s, x, y, size, c = '#ffffff', align = 'center') { // text on its own dark plate, readable over any view
+  ctx.font = ` ${size}px ${FONT}`; const w = ctx.measureText(s).width + 28, h = size + 16;
+  const px = align === 'center' ? x - w / 2 : align === 'left' ? x - 14 : x - w + 14;
+  plate(px, y - h / 2, w, h); text(s, x, y + 1, size, c, align);
+}
+function gem(x, y, r, css, on = true) { // a cut stone, seen from above
+  ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 - Math.PI / 2; ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath();
+  if (!on) { ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1.5; ctx.stroke(); return; }
+  ctx.fillStyle = css; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.5, y - r * 0.1); ctx.lineTo(x, y + r * 0.15); ctx.lineTo(x - r * 0.5, y - r * 0.1); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(20,22,42,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+}
+function tankIcon(x, y, c) { // an oxygen tank
+  ctx.fillStyle = c; rr(x - 9, y - 14, 18, 30, 8); ctx.fill(); ctx.fillRect(x - 4, y - 21, 8, 8); ctx.fillRect(x - 9, y - 23, 18, 4);
+}
+function suitIcon(x, y, c) { // a helmet: the suit's health
+  ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y - 2, 13, Math.PI, 0); ctx.lineTo(x + 13, y + 10); ctx.lineTo(x - 13, y + 10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(27,29,51,0.85)'; rr(x - 8, y - 6, 16, 10, 4); ctx.fill();
+}
+function packIcon(x, y, fill) { // the pack: it glows brighter as it fills
+  ctx.save(); ctx.shadowColor = `rgba(255,236,170,${0.25 + fill * 0.75})`; ctx.shadowBlur = 6 + fill * 26;
+  ctx.fillStyle = '#f1dc9a'; rr(x - 17, y - 18, 34, 38, 9); ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#cdb673'; rr(x - 17, y - 18, 34, 15, 8); ctx.fill();
+  ctx.fillStyle = '#8c86a8'; ctx.fillRect(x - 3, y - 8, 6, 9); ctx.fillRect(x - 12, y - 25, 5, 9); ctx.fillRect(x + 7, y - 25, 5, 9);
+}
+function bar(x, y, w, h, frac, c) {
+  ctx.fillStyle = 'rgba(255,255,255,0.16)'; rr(x, y, w, h, h / 2); ctx.fill();
+  if (frac > 0.01) { ctx.fillStyle = c; rr(x, y, Math.max(h, w * clamp(frac, 0, 1)), h, h / 2); ctx.fill(); }
+}
+function arrow(x, y, ang, size, c) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.fillStyle = c;
+  ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * 0.7, size * 0.7); ctx.lineTo(0, size * 0.3); ctx.lineTo(-size * 0.7, size * 0.7); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function bearing(x, z) { // the angle on screen from straight ahead to a place: 0 ahead, positive to the right
+  const p = state.p, dx = x - p.x, dz = z - p.z;
+  const fx_ = -Math.sin(p.yaw), fz_ = -Math.cos(p.yaw), rx_ = Math.cos(p.yaw), rz_ = -Math.sin(p.yaw);
+  return Math.atan2(dx * rx_ + dz * rz_, dx * fx_ + dz * fz_);
+}
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const HOT = '#ff2390';
+function hudPlay() {
+  const p = state.p, low = state.o2 < tune.oxygen_low, fill = state.pack.length / tune.pack_slots;
+  // danger: a magenta wash when hurt, and at the edges when oxygen is low
+  if (state.hurt > 0 || low) {
+    const a = Math.max(state.hurt * 0.5, low ? 0.16 + 0.1 * Math.sin(state.t * 6) : 0);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 240, W / 2, H / 2, 760);
+    g.addColorStop(0, 'rgba(255,35,144,0)'); g.addColorStop(1, `rgba(255,35,144,${a})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  // oxygen and suit, top left
+  plate(20, 18, 318, 104);
+  tankIcon(48, 52, low ? HOT : '#bfe6ff'); bar(72, 42, 180, 18, state.o2, low ? HOT : '#bfe6ff');
+  text(mmss(state.o2 * tune.oxygen_seconds), 322, 52, 22, low ? HOT : '#ffffff', 'right', 'bold');
+  suitIcon(48, 96, '#f2f0fa'); bar(72, 86, 180, 18, state.hp / tune.max_health, '#f2f0fa');
+  text(`${Math.max(0, Math.ceil(state.hp))}`, 322, 96, 22, '#ffffff', 'right', 'bold');
+  if (state.canisters > 0) label(`Q: oxygen canister ×${state.canisters}`, 34, 150, 18, '#bfe6ff', 'left');
+  // the pack and its worth, top right
+  const cols = 8, rows = Math.ceil(tune.pack_slots / cols), pw = 300, ph = 74 + rows * 26;
+  plate(W - pw - 20, 18, pw, ph);
+  packIcon(W - pw + 14, 54, fill);
+  text('PACK WORTH', W - 40, 36, 16, '#d8d4ec', 'right');
+  text(`${state.worth}`, W - 40, 66, 38, '#fff2c2', 'right', 'bold');
+  for (let i = 0; i < tune.pack_slots; i++) {
+    const gx = W - pw - 20 + 34 + (i % cols) * 33, gy = 106 + Math.floor(i / cols) * 26, k = state.pack[i];
+    gem(gx, gy, 10, k ? ORE[k].css : '', !!k);
+  }
+  // the ship: how far, and how long the walk is
+  const ds = dist(p.x, p.z, SHIP.x, SHIP.z), speed = tune.walk_speed * (1 - tune.full_pack_slow * fill);
+  const walk = ds / speed, tight = walk > state.o2 * tune.oxygen_seconds * 0.8;
+  plate(W / 2 - 190, H - 66, 380, 48);
+  arrow(W / 2 - 162, H - 42, bearing(SHIP.x, SHIP.z), 12, tight ? HOT : '#e9fbff');
+  text(`Ship ${Math.round(ds)} m   ·   walk back ${mmss(walk)}`, W / 2 + 14, H - 41, 20, tight ? HOT : '#ffffff');
+  // awake creatures: a magenta wedge on the side they are on
+  for (const c of state.creatures) {
+    if (c.st === 'sleep' || c.st === 'return') continue;
+    const a = bearing(c.x, c.z), d = dist(c.x, c.z, p.x, p.z);
+    if (d > 45) continue;
+    arrow(W / 2 + Math.sin(a) * 250, H / 2 - Math.cos(a) * 250, a, d < 10 ? 20 : 14, HOT);
+  }
+  // crosshair and the drill's progress
+  ctx.strokeStyle = 'rgba(27,29,51,0.9)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(W / 2, H / 2, 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(W / 2, H / 2, 5, 0, Math.PI * 2); ctx.stroke();
+  if (state.frac > 0) {
+    ctx.strokeStyle = 'rgba(27,29,51,0.8)'; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(W / 2, H / 2, 26, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#fff2c2'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(W / 2, H / 2, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(state.frac, 0, 1)); ctx.stroke();
+  }
+  if (state.prompt) label(state.prompt, W / 2, H / 2 + 70, 20, state.promptBad ? '#ffd0e4' : '#ffffff');
+  // the rock stirring: how close the nearest sleeper is to waking
+  if (state.stir > 0.12) {
+    plate(W / 2 - 150, H / 2 + 104, 300, 44);
+    text('Something stirs', W / 2 - 132, H / 2 + 126, 18, HOT, 'left'); bar(W / 2 + 12, H / 2 + 119, 122, 14, state.stir, HOT);
+  }
+  if (state.toastT > 0) label(state.toast, W / 2, 150, 26, '#ffffff');
+  if (low && state.o2 > 0) label('Oxygen low', W / 2, 196, 20, HOT);
+  if (state.o2 <= 0) label('No oxygen', W / 2, 196, 22, HOT);
+  if (!locked && state.time < 12) label('Click to look with the mouse', W / 2, H - 100, 18, '#d8d4ec');
+}
+function hudHome() {
+  const h = state.home, worth = stashWorth();
+  plate(20, 18, 430, 74);
+  text('STASH WORTH', 40, 38, 16, '#d8d4ec', 'left'); text(`${worth}`, 40, 68, 32, '#fff2c2', 'left', 'bold');
+  text(`Best haul ${save.best}`, 432, 40, 18, '#ffffff', 'right'); text(`Runs ${save.runs}   Lost ${save.deaths}`, 432, 68, 18, '#d8d4ec', 'right');
+  plate(W - 470, 18, 450, 74);
+  ORE_KEYS.forEach((k, i) => { const x = W - 440 + i * 108; gem(x, 44, 12, ORE[k].css); text(`${save.stash[k]}`, x + 22, 45, 22, '#ffffff', 'left', 'bold'); text(ORE[k].name, x - 12, 74, 16, '#d8d4ec', 'left'); });
+  const goal = save.goal ? 'Goal reached. Now: how rich can you get?' : `Goal: craft the Better Drill  (${tune.drill2_glint} Glint, ${tune.drill2_ember} Ember, ${tune.drill2_verdite} Verdite)`;
+  label(goal, W / 2, 124, 18, save.goal ? '#fff2c2' : '#ffffff');
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(W / 2, H / 2, 5, 0, Math.PI * 2); ctx.stroke();
+  if (h.mode === 'unpack') {
+    plate(W / 2 - 230, H - 200, 460, 120);
+    text('Unpacking the haul', W / 2, H - 172, 20, '#d8d4ec'); text(`+${h.counted}`, W / 2, H - 128, 44, '#fff2c2', 'center', 'bold');
+    text('Enter: skip', W / 2, H - 94, 16, '#d8d4ec');
+  } else if (h.mode === 'bench') {
+    plate(W / 2 - 330, 170, 660, 330, 0.9);
+    text('Crafting bench', W / 2, 204, 28, '#ffffff', 'center', 'bold');
+    const row = (y, key, name, what, cost, ok, have) => {
+      ctx.fillStyle = ok ? 'rgba(255,242,194,0.14)' : 'rgba(255,255,255,0.06)'; rr(W / 2 - 300, y - 44, 600, 96, 10); ctx.fill();
+      text(`${key}`, W / 2 - 270, y, 30, ok ? '#fff2c2' : '#9a97b4', 'center', 'bold');
+      text(name, W / 2 - 236, y - 22, 22, '#ffffff', 'left', 'bold'); text(what, W / 2 - 236, y + 4, 16, '#d8d4ec', 'left');
+      let x = W / 2 - 228;
+      for (const [k, n] of cost) { if (!n) continue; gem(x, y + 32, 9, ORE[k].css); text(`${save.stash[k]} / ${n}`, x + 16, y + 33, 17, save.stash[k] >= n ? '#ffffff' : '#ffb8d6', 'left'); x += 112; }
+      text(have, W / 2 + 284, y - 22, 16, '#d8d4ec', 'right'); text(ok ? 'Press to craft' : 'Not enough ore', W / 2 + 284, y + 32, 16, ok ? '#fff2c2' : '#9a97b4', 'right');
+    };
+    row(290, '1', 'Better Drill', 'Drills twice as fast. Cuts Sunstone. Lost if you die with it.', [['glint', tune.drill2_glint], ['ember', tune.drill2_ember], ['verdite', tune.drill2_verdite]], canCraftDrill(), `On the rack: ${save.drill2}`);
+    row(400, '2', 'Oxygen canister', `Q on a run: +${Math.round(tune.canister_refill * 100)}% oxygen. You carry up to ${tune.canister_carry}.`, [['glint', tune.canister_glint], ['ember', tune.canister_ember]], canCraftCan(), `In store: ${save.canisters}`);
+    text('E: close', W / 2, 476, 17, '#d8d4ec');
+  } else {
+    const drillName = save.useDrill2 && save.drill2 > 0 ? 'Better Drill' : 'Basic drill';
+    const prompts = {
+      stash: 'Stash: everything here is safe.  E: count it',
+      bench: 'E: use the crafting bench',
+      rack: save.drill2 > 0 ? `Tool rack: taking the ${drillName}.  E: switch` : 'Tool rack: Basic drill (free, always here)',
+      hatch: `E: fly to the asteroid with the ${drillName}${Math.min(save.canisters, tune.canister_carry) ? ` and ${Math.min(save.canisters, tune.canister_carry)} canister` : ''}. Die and you lose pack and tool.`,
+    };
+    if (h.near) label(prompts[h.near], W / 2, H / 2 + 70, 19);
+    else label('Stash ahead  ·  bench right  ·  tool rack left  ·  ship hatch behind you', W / 2, H - 44, 17, '#d8d4ec');
+  }
+  if (h.bannerT > 0 && h.banner) label(h.banner, W / 2, 176, 20, '#fff2c2');
+}
+function hudTitle() {
+  plate(W / 2 - 430, 96, 860, 500, 0.78);
+  text(TITLE, W / 2, 168, 84, '#fff2c2', 'center', 'bold');
+  text('Mine the rock. Fill your pack. Get back to your ship.', W / 2, 238, 24, '#ffffff');
+  for (let i = 0; i < 4; i++) gem(W / 2 - 96 + i * 64, 292, 16, ORE[ORE_KEYS[i]].css);
+  CONTROLS.forEach((c, i) => text(c, W / 2, 352 + i * 34, 19, '#d8d4ec'));
+  text('Die out there and you lose your pack and your drill. The stash at home is safe.', W / 2, 474, 19, '#ffd0e4');
+  text(save.runs > 0 ? 'Enter or click: go home' : 'Enter or click: land on the asteroid', W / 2, 528, 28, '#ffffff', 'center', 'bold');
+  if (save.runs > 0) text(`Stash worth ${stashWorth()}  ·  Best haul ${save.best}  ·  N: wipe the save and start over`, W / 2, 566, 17, '#d8d4ec');
+}
+function hudOver() {
+  ctx.fillStyle = 'rgba(27,29,51,0.6)'; ctx.fillRect(0, 0, W, H);
+  plate(W / 2 - 400, 220, 800, 280, 0.9);
+  text(state.lost.why, W / 2, 276, 52, HOT, 'center', 'bold');
+  text(`Lost: ${state.lost.n} ore worth ${state.lost.w}, and your ${state.drill === 2 ? 'Better Drill' : 'drill'}.`, W / 2, 346, 24, '#ffffff');
+  text(`The stash at home is safe: worth ${stashWorth()}.`, W / 2, 386, 21, '#d8d4ec');
+  text('Enter: back home', W / 2, 452, 26, '#fff2c2', 'center', 'bold');
+}
+
+// ---- Scenes -----------------------------------------------------------------------------
+const scenes = {
+  figures: {
+    update(dt) { state.t += dt; },
+    draw() {
+      if (renderer) renderer.render(G.fig, G.figCam);
+      label('Burrower', W / 2 - 250, H - 96, 26); label('Spitter', W / 2 + 250, H - 96, 26);
+      label('Sleeps in the rock. Chases what wakes it.', W / 2 - 250, H - 54, 17, '#d8d4ec');
+      label('Rooted. Lobs globs at where you stand.', W / 2 + 250, H - 54, 17, '#d8d4ec');
+    },
+  },
+  title: {
+    update(dt) {
+      state.t += dt;
+      if (pressed('KeyN') && save.runs > 0) { save = freshSave(); writeSave(); }
+      if (pressed('Enter') || pressed('Space')) { if (save.runs > 0) goHome('title'); else startRun(); }
+    },
+    draw() { if (renderer) { syncWorld(); renderer.render(G.world, G.cam); } hudTitle(); },
+  },
+  play: {
+    update(dt) {
+      if (pressed('KeyP') || pressed('Escape')) { state.prev = 'play'; drillSound(false, 0); scene = 'pause'; return; }
+      updatePlay(dt);
+    },
+    draw() { if (renderer) { syncWorld(); renderer.render(G.world, G.cam); } hudPlay(); },
+  },
+  home: {
+    update(dt) {
+      if (state.home.mode === 'walk' && (pressed('KeyP') || pressed('Escape'))) { state.prev = 'home'; scene = 'pause'; return; }
+      updateHome(dt);
+    },
+    draw() { if (renderer) { syncHome(); renderer.render(G.home, G.homeCam); } hudHome(); },
+  },
+  pause: {
+    update() { if (pressed('KeyP') || pressed('Escape')) scene = state.prev; },
+    draw() {
+      scenes[state.prev].draw();
+      ctx.fillStyle = 'rgba(27,29,51,0.55)'; ctx.fillRect(0, 0, W, H);
+      plate(W / 2 - 400, 230, 800, 250, 0.9);
+      text('Paused', W / 2, 278, 48, '#ffffff', 'center', 'bold');
+      CONTROLS.forEach((c, i) => text(c, W / 2, 340 + i * 30, 18, '#d8d4ec'));
+      text('P or click: back to the game', W / 2, 446, 22, '#fff2c2');
+    },
+  },
+  over: {
+    update(dt) { state.t += dt; if (pressed('KeyR') || pressed('Enter')) goHome('death'); },
+    draw() { if (renderer) { syncWorld(); renderer.render(G.world, G.cam); } hudOver(); },
+  },
+};
+
+// ---- Loop: fixed step, frame time clamped ---------------------------------------------
+function step() {
+  if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  scenes[scene].update(STEP); hit.clear();
+}
+let last, acc = 0, ALPHA = 1; // ALPHA: how far the frame is between the last two steps
+function tick() {
+  const now = clock.now();
+  acc += Math.min(now - last, 0.25); last = now; // a stall never fast-forwards the game
+  while (acc >= STEP) { step(); acc -= STEP; }
+  ALPHA = acc / STEP;
+  drawFrame();
+}
+function drawFrame() { ctx.clearRect(0, 0, W, H); scenes[scene].draw(); }
+function frame() { tick(); requestAnimationFrame(frame); }
+// A headless browser on a time budget runs timers but almost no animation frames: a timer
+// ticks when no frame has come for 100 ms on a visible page; a hidden tab stays paused.
+function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
+
+// ---- What a check can read and drive (?manual=1 stops the loop; players never see it) ----
+window.game = {
+  get scene() { return scene; },
+  get state() { return state; },
+  press(code) { hit.add(code); },
+  hold(code, on) { on ? down.add(code) : down.delete(code); },
+  get events() { return events; }, // the loop steps; a check empties it
+  step(n = 1, draw = true, alpha = 1) {
+    for (let i = 0; i < n; i++) step();
+    if (draw) { ALPHA = alpha; drawFrame(); }
+  },
+};
+
+reset();
+buildView();
+loadPacks();
+scene = params.get('scene') || 'title';
+if (scene === 'play') startRun();
+if (scene === 'home') goHome('title');
+last = clock.now();
+if (params.get('manual') === '1') drawFrame();
+else { requestAnimationFrame(frame); setInterval(timer, 50); }
+</script>
+</body>
+</html>

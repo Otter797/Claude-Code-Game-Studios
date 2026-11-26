@@ -1,0 +1,22 @@
+L1	pass	evidence/play.png	pastel flat-shaded ground and rocks, glossy saturated blue ore, pack icon with glow; magenta only on creatures (evidence/figures.png)
+L2	pass	evidence/play.png	a bright friendly space mood, and a pack worth that is lost on death; neither game's look or screens are used
+L3	pass	evidence/play.png	3D, first person, drill held in view
+F1	pass	evidence/play.png	drilled one Glint in the check run: the progress ring and pack worth 10 show it; crack steps and the flying ore are in index.html (syncWorld, fx)
+F2	pass	index.html:166	one fixed layout: a safe pad, then Shallows, Midfield and the Deep with richer ore and more creatures; only the pad was seen in a shot
+F3	pass	evidence/play.png	the gauge reads 8:54 of 9:00 after six seconds; the sprint multiplier is in index.html (updatePlay)
+F4	not_assessed	evidence/figures.png	both kinds are drawn, each with its own outline, and the wake-on-noise code is in index.html (makeNoise, updateCreatures); no run woke one, so it was not seen working
+F5	pass	evidence/play.png	16 slots and PACK WORTH 10 on screen
+F6	not_assessed	index.html:331	boarding at the ship and losing pack and tool on death are coded; no run boarded or died
+F7	not_assessed	evidence/home.png	the home room, stash wall and goal line render; unpacking, the saved stash and crafting are coded in index.html (updateHome) but no run used them
+S1	pass	evidence/play.png	a mining run plays from the title: walked to a seam and drilled an ore
+S2	not_assessed	index.html:596	two recipes at the bench; not used in a run
+S3	pass	evidence/home.png	one home room with stash shelves; the bench, rack and hatch are built in index.html (buildView)
+S4	not_assessed	index.html:302	the ship stands on the pad as the exit and the hatch launches a run; not used in a run
+M1	pass	evidence/play.png	sunlit pastel asteroid, drill in hand, oxygen near full; the ship is behind the player at the start
+M2	pass	evidence/play.png	a glossy blue seam stands 4.5 m ahead of the start
+M3	pass	evidence/play.png	holding Space on it gave one ore and pack worth 10; the three crack steps are in index.html (syncWorld)
+M4	not_assessed	index.html:231	seams and a sleeping Burrower with a dull magenta glow lie past the pad; not seen in a shot
+C1	not_assessed	index.html:511	creatures give up and Spitters sleep while the player is on the pad; not played
+C2	not_assessed	index.html:498	oxygen was seen draining; creatures waking from noise and the Deep's density were not played
+C3	not_assessed	index.html:331	coded; no run died
+C4	not_assessed	index.html:440	Sunstone refuses the basic drill and the Better Drill cuts it; not played

@@ -1,0 +1,9 @@
+first person	the camera is the miner's eyes, with the drill held in view	evidence/play.png
+colorful space world	a pastel sunlit asteroid under a ringed planet; the ore is the vivid colour	evidence/play.png
+asteroids can be for mining runs heavy with crafting materials	the run is an asteroid mining run; four ores feed two bench recipes	evidence/play.png
+crafting	the home bench crafts the Better Drill and oxygen canisters from stashed ore	index.html (updateHome, bench)
+taking a spaceship	the ship is the landing point and the only exit; the hatch at home launches a run	evidence/play.png
+home space station	one home room with a stash wall, bench, tool rack and hatch	index.html (buildView, home)
+higher risk higher reward	richer ore lies deeper, among more creatures and further from the ship	index.html (SEAMS, DENS)
+the game	one playable browser game, from the title to home and back out	evidence/play.png
+First-person	the camera is the miner's eyes, with the drill held in view	evidence/play.png
