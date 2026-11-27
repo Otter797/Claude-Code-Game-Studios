@@ -3,6 +3,13 @@
 ## Status
 Accepted
 
+> **Amended by ADR-0003** (`adr-0003-home-and-storm-persistence.md`, Accepted on
+> 2026-11-27). It brings the player-built home, carried items and a storm clock
+> into the save, allows a play-time note during a run, and moves the write off
+> the main thread. The clauses it changes are listed there under "What this
+> changes in ADR-0002" and are in effect. Everything
+> else in this ADR stands.
+
 ## Date
 2026-11-26
 

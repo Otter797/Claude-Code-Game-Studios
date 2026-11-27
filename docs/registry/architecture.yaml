@@ -40,7 +40,7 @@
 #   unsupported layout, with its number.
 
 version: 1
-last_updated: "2026-11-26"
+last_updated: "2026-11-27"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -63,6 +63,7 @@ state_ownership:
     referenced_by:
       - docs/architecture/adr-0001-network-model.md
       - docs/architecture/adr-0002-persistence.md   # saves and loads the stash and progress part of it
+      - docs/architecture/adr-0003-home-and-storm-persistence.md   # adds the home model and storm clock as host-owned state
     added: 2026-11-26
     revised: ""
 
@@ -70,11 +71,35 @@ state_ownership:
     status: active
     owner_system: persistence-service
     adr: docs/architecture/adr-0002-persistence.md
-    interface: "ISaveStore.Load() / Save(SaveModel), called only by the host's Authority layer; the Simulation exchanges a plain SaveModel and never touches files. Covers stash, gear, recipes, statistics and the run marker."
+    # Old value (before ADR-0003, 2026-11-27): "ISaveStore.Load() / Save(SaveModel), called only by the host's Authority layer; the Simulation exchanges a plain SaveModel and never touches files. Covers stash, gear, recipes, statistics and the run marker."
+    interface: "The host's Authority layer hands immutable SaveModel snapshots to ISaveQueue; only the queue's single writer calls ISaveStore.Load() / Save(SaveModel). The Simulation exchanges a plain SaveModel and never touches files. Covers the home (structures and pieces), containers keyed by piece id, carried items, the storm clock, gear, recipes, statistics and the run marker."
     write_access: host-only
     referenced_by:
       - docs/architecture/adr-0002-persistence.md
+      - docs/architecture/adr-0003-home-and-storm-persistence.md   # extends the save model and moves the write off the main thread
     added: 2026-11-26
+    revised: 2026-11-27
+
+  - state: home_model
+    status: active
+    owner_system: building
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    interface: "Session-level Simulation state, never owned by a scene object. Changed only through Building's TryPlace / TryRemove / TryRepairAll (each returns a change list and a new revision number) and IStructureDamage; read through the shelter query IsSheltered(pieceId), a pure function of the model. Pieces reach Presentation as data, never one networked object each."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
+
+  - state: storm_clock
+    status: active
+    owner_system: storms
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    interface: "Play time in milliseconds advanced only by the Simulation tick, plus the saved next storm (time, strength) and generator state. Storms are resolved only by Storms' AdvanceTo(playTimeMs), which returns StormReport values; other systems read the next storm's time and strength and never write the clock."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
     revised: ""
 
 # Example:
@@ -117,6 +142,33 @@ interfaces:
     added: 2026-11-26
     revised: ""
 
+  - contract: save_request
+    status: active
+    pattern: direct_call
+    producer: session-host-authority
+    consumers:
+      - persistence-service
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    signal_signature: "ISaveQueue.Request(snapshot) returns at once; RequestAndWait(snapshot) completes with success, failure or timed-out; NotePlayTime(playTimeMs); Drain(). One pending snapshot and one pending note, newest wins within each kind. Only the queue's writer calls ISaveStore."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
+
+  - contract: storm_damage_delivery
+    status: active
+    pattern: direct_call
+    producer: storms
+    consumers:
+      - building
+      - stash
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    signal_signature: "Storms decides the damage and calls Building's IStructureDamage (apply a storm of a given strength), Building's shelter query, and Stash's container-clearing call. Building and Stash never reference Storms; Run Flow never calls Storms."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
+
 # Example:
 #
 # interfaces:
@@ -144,7 +196,16 @@ interfaces:
 # Register a budget when an ADR explicitly claims a frame time allocation.
 # The registry lets /architecture-review verify the total doesn't exceed the target.
 
-performance_budgets: []
+performance_budgets:
+  - system: persistence
+    status: active
+    budget_ms: 1.0
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    notes: "Main-thread cost of one save point (the snapshot) with a 2,000-piece home, with near-zero managed allocation per save point. A target, not yet measured; serializing and file work run on the background writer."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
 
 # Example:
 #
@@ -284,11 +345,39 @@ forbidden_patterns:
     added: 2026-11-26
 
   - pattern: run_state_saved
-    status: active
+    status: "superseded_by: ADR-0003"
     description: "Run state must never be saved, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
     why: "Loss must stick; resuming or reloading a run removes the game's core stake."
     adr: docs/architecture/adr-0002-persistence.md
     added: 2026-11-26
+
+  - pattern: run_state_saved_beyond_play_time
+    status: active
+    description: "Run state must never be saved, with one exception: the play-time note, which holds only the profile id and the storm clock. The pack is not saved during a run, a run can never be resumed, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
+    why: "Loss must stick; an abandoned run must still count the time actually played."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: home_state_in_scene_or_physics
+    status: active
+    description: "The home model and storm clock must never be owned by scene objects or read back from the scene, and the shelter check must never use physics, colliders or a loaded scene."
+    why: "The home scene is not loaded during a run, and rules must be testable without a scene."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: action_split_across_writes
+    status: active
+    description: "An action's cost and its result (materials spent, piece added) must never be saved by separate writes or in separate files; both go in one snapshot of the one save document."
+    why: "A crash between two writes would duplicate or destroy materials."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: second_storm_path_or_wall_clock
+    status: active
+    description: "Storms must never be resolved anywhere but Storms' AdvanceTo, and the storm clock must never read the wall clock or depend on the engine's time scale."
+    why: "Home, run end and crash recovery must give the same result, and storms must not run while the game is closed."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
 
 # Example:
 #
