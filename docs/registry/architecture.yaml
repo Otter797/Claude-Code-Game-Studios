@@ -40,7 +40,7 @@
 #   unsupported layout, with its number.
 
 version: 1
-last_updated: ""
+last_updated: "2026-11-26"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -53,7 +53,29 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: run_and_player_state
+    status: active
+    owner_system: session-host-authority
+    adr: docs/architecture/adr-0001-network-model.md
+    interface: "Replicated state published by the Authority layer (read-only on every client); changes only by a request the host validates through the Simulation. Covers pack, tool, oxygen, health, ore seams, creatures and hunters, run clock, extraction, stash, crafting."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+      - docs/architecture/adr-0002-persistence.md   # saves and loads the stash and progress part of it
+    added: 2026-11-26
+    revised: ""
+
+  - state: persistent_profile
+    status: active
+    owner_system: persistence-service
+    adr: docs/architecture/adr-0002-persistence.md
+    interface: "ISaveStore.Load() / Save(SaveModel), called only by the host's Authority layer; the Simulation exchanges a plain SaveModel and never touches files. Covers stash, gear, recipes, statistics and the run marker."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+    revised: ""
 
 # Example:
 #
@@ -81,7 +103,19 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: player_intent_request
+    status: active
+    pattern: rpc
+    producer: presentation
+    consumers:
+      - session-host-authority
+    adr: docs/architecture/adr-0001-network-model.md
+    signal_signature: "One client-to-host request per player intent (mine, pick up, extract, craft); the host validates through IRunSimulation and never trusts a client-supplied result"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
 
 # Example:
 #
@@ -141,7 +175,39 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: multiplayer_networking
+    status: active
+    api: Netcode for GameObjects (com.unity.netcode.gameobjects), host-authoritative client-server topology
+    not: UNet, Mirror, Photon, dedicated server
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Official stack covered by the engine reference; host mode fits players-versus-AI co-op and solo as a one-player host"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
+
+  - purpose: rpc_declaration
+    status: active
+    api: "[Rpc(SendTo...)] attribute with an Rpc method-name suffix"
+    not: "[ServerRpc] / [ClientRpc] for new code"
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Recommended form in the Netcode for GameObjects 3.2.1 manual, read 2026-11-26"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
+
+  - purpose: solo_session_transport
+    status: active
+    api: SinglePlayerTransport, assigned before the host starts
+    not: a network socket transport for solo play
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Solo must work offline with no firewall prompt and no network error"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
 
 # Example:
 #
@@ -167,7 +233,62 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: presentation_writes_game_state
+    status: active
+    description: "Views, HUD, audio, VFX and input code must never change game state or contain a rule (a threshold, a cost, a yield)."
+    why: "State must have one writer, the host, or co-op diverges and loot can duplicate."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: simulation_references_netcode
+    status: active
+    description: "Simulation code must never reference the Netcode package, MonoBehaviour lifecycle, scene singletons, or read assets itself."
+    why: "Rules must be testable in EditMode without a scene or a session."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: offline_only_rule_path
+    status: active
+    description: "There must never be a separate solo or offline code path for a rule; solo goes through ISessionHost.StartSolo() and the same request path as co-op."
+    why: "A second path is never exercised by co-op and drifts from the first."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: netcode_manager_singleton_access
+    status: active
+    description: "Code must never access the Netcode manager's singleton outside the ISessionHost implementation."
+    why: "Hidden global coupling makes systems untestable and ties them to one transport."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: unet_usage
+    status: active
+    description: "UNet must never be used."
+    why: "Deprecated per docs/engine-reference/unity/modules/networking.md."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: simulation_file_io
+    status: active
+    description: "Simulation code must never read or write files; it exchanges a SaveModel with the persistence service only."
+    why: "Rules must stay testable without a disk, and saves must have one writer on the host."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+
+  - pattern: progress_in_engine_preferences
+    status: active
+    description: "Game progress must never be stored in the engine's preferences store (PlayerPrefs). Settings and key bindings may use it."
+    why: "On Windows it is the registry: no atomic write, no backups, no versioning."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+
+  - pattern: run_state_saved
+    status: active
+    description: "Run state must never be saved, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
+    why: "Loss must stick; resuming or reloading a run removes the game's core stake."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
 
 # Example:
 #

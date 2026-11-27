@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|-------|
 | **Engine Version** | Unity 6.3 LTS |
-| **Installed at pin time** | NOT DETERMINED — pinned 2026-11-26 from a cloud session; the designer's Windows machine was not probed. Assumed editor: 6000.3.26f1 at the Unity Hub default path. |
+| **Installed at pin time** | 6000.3.29f1 at `C:\Unity\Editor\6000.3.29f1`, verified 2026-11-26 with `unity editors --installed`. Installed without admin rights, so the Windows Firewall rule for remote profiling was not added. |
 | **Release Date** | December 2025 |
-| **Latest editor on the pinned line** | 6000.3.26f1 (Oct 8, 2026) |
+| **Latest editor on the pinned line** | 6000.3.29f1 (seen 2026-11-26 in `unity releases --lts`; release date not looked up) |
 | **Project Pinned** | 2026-02-13 |
 | **Last Docs Verified** | 2026-10-17 (release timeline, newer releases, latest 6.3 LTS editor); 2026-02-13 (rest of directory) |
 | **LLM Knowledge Cutoff** | May 2025 |
