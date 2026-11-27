@@ -87,9 +87,9 @@ is handled by building one trade at a time (Pillar 4).
 
 ### Core Mechanics (Systems we build)
 
-1. **Extraction runs:** a limited pack, exits, and loss of everything carried on death; the home stash is always safe.
+1. **Extraction runs:** a limited pack, exits, and loss of everything carried on death. A failed run never touches what is stored at home.
 2. **Three trades:** asteroid mining, moon stealth heists, planet melee combat with bosses.
-3. **Home:** farming, crafting workshops, a player-built house and a persistent stash.
+3. **Home:** a small valley on a planet where the player builds freely (foundations, walls, floors, ceilings, roofs, stairs) and sets up workbenches. The valley offers only rocks and sticks; everything better comes back from runs. Storms are forecast and damage or destroy what is not built to withstand them; the stash is safe only inside an intact shelter. Farming comes later.
 4. **Progression:** gear tiers crafted from run materials; ship upgrades that unlock further, more dangerous destinations.
 5. **Co-op:** host-authoritative crews against AI.
 
@@ -123,7 +123,7 @@ to follow, a purely cozy game with nothing to lose, or slow turn-based strategy.
 - **Onboarding curve**: the first run is a short asteroid mining trip with one tool and one hazard. It teaches the whole game in miniature: fill the pack, watch the danger rise, get out.
 - **Difficulty scaling**: the player sets it. Further destinations and deeper areas are more dangerous and richer; nothing forces the step up.
 - **Feedback clarity**: wealth is visible. The pack brightens with loot, the stash fills, the home grows.
-- **Recovery from failure**: death costs what was carried and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save.
+- **Recovery from failure**: death costs what was carried and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and anything stored outside an intact shelter can be lost.
 
 ---
 
@@ -197,7 +197,8 @@ this pillar picks the one that does.
 ### Pillar 2: Risk is a choice
 The player always decides how much to stake. Danger is always readable and can
 be scouted before it is lethal. Heists and bosses may keep secrets; a careful
-player could always have seen it coming.
+player could always have seen it coming. Storms at home follow the same rule:
+they are always forecast, with their strength shown and time to prepare.
 
 *Design test*: Debating a surprise that kills an unwarned player or a danger
 they could have seen coming, this pillar picks the visible danger.
@@ -225,10 +226,10 @@ stand in, this pillar picks the workshop.
 ### Anti-Pillars (What This Game Is NOT)
 
 - **NOT player-versus-player raids**: they would turn chosen risk into imposed risk (Pillar 2) and multiply the build.
-- **NOT mandatory home upkeep** (crops dying, bills due): it would turn the scoreboard into a job (Pillar 5).
+- **NOT busywork upkeep**: nothing at home decays by itself and nothing comes due (no dying crops, no bills). The one threat to the home is storms: always forecast, prepared for by building, and survivable by a home built for them (Pillars 2 and 5).
 - **NOT a story campaign with fixed missions**: it would pull the game's centre away from the haul (Pillar 1).
 - **NOT gear sold or granted outside play**: wealth must mean something (Pillars 1 and 3).
-- **NOT a mandatory run cadence or timers between runs**: the player runs when they choose, which protects the stay-home path (Pillar 2).
+- **NOT timers that force a run**: no cooldowns, no waiting, and the player runs when they choose. A forecast storm sets a deadline for preparing the home, not for leaving it (Pillar 2).
 
 ---
 
@@ -335,12 +336,15 @@ Civilization.
 - This is the designer's first first-person 3D game after two finished mobile games; the MVP will take longer than it looks, mostly on controller feel and hazard tuning.
 - Bosses, animation and big maps cost a lot even in low-poly.
 - Most likely cut point: partway through Tier 1. Splitting it into 1a and 1b makes that a graceful stop.
+- On 2026-11-26 the designer moved the buildable valley home, gathering and storms into the MVP, on top of the 20 systems already sized at 9 to 12 months. The MVP has not been re-sized, and the systems index, art bible, ADR-0002 and the Concept gate report predate the change.
 
 ### Open Questions
 - Crew size for co-op. Answer during `/design-system` for co-op, before Tier 2a.
 - What the worsening hazard on an asteroid is. Answer with the MVP prototype.
 - Does death also cost equipped gear, or only the pack? Current rule: everything carried. Test in the MVP.
-- Home planet or home space station, or the player's choice of either?
+- Storms: how often they come and how strong; whether the forecast clock keeps running while the player is away on a run.
+- Can a rock-and-stick shelter survive a storm at all? If not, staying home the whole game stops being possible, which the designer named as a goal.
+- What counts as "sheltered" for the stash.
 - How a stay-home player earns: trading with crews, a market, or both?
 
 ### Director Review Record
@@ -364,12 +368,13 @@ the player go straight back out.
 1. One asteroid, one mining tool, and a pack with limited space
 2. A hazard that worsens the longer you stay
 3. An exit; die before reaching it and the pack is lost
-4. A home with a persistent stash and one crafting bench
+4. A home valley: gathering rocks and sticks, free building from basic parts (foundations, walls, floors, ceilings, roofs, stairs), basic workbenches, a persistent stash that is safe when sheltered, and forecast storms
 5. Solo play running as a host with one player, with versioned save data
 
 **Explicitly NOT in MVP** (defer to later):
 - Co-op play itself (the architecture allows for it; the feature is Tier 2a)
-- Farming and house building
+- Farming
+- Weapons (the drill is the only tool; melee arrives with the planet trade)
 - Heists, melee combat, bosses
 - The ship as a flyable vehicle and the destination map
 
@@ -381,9 +386,9 @@ assessed by the producer.
 
 | Tier | Content | Features | Timeline (estimate) |
 | ---- | ---- | ---- | ---- |
-| **MVP** | One asteroid | Mining run, pack, hazard, exit, stash, one bench. 20 systems; see `design/gdd/systems-index.md` | 9 to 12 months (producer's estimate, low confidence; originally 2 to 4) |
+| **MVP** | One asteroid, the home valley | Mining run, pack, hazard, exit, stash; a buildable valley home with gathering, workbenches and forecast storms. See `design/gdd/systems-index.md`, which predates the valley home and is being reworked | Not re-sized since the valley home was added. Before it: 9 to 12 months (producer's estimate, low confidence; originally 2 to 4) |
 | **1a. The mining game** | Several asteroids | Tool and gear tiers, crafting, stash. The first finish line | Not estimated |
-| **1b. Home and ship** | Home plot, destination map | Basic farming, buildable home, ship | Not estimated |
+| **1b. Home and ship** | Destination map | Basic farming, ship (the buildable home moved into the MVP on 2026-11-26) | Not estimated |
 | **2a. Crew** | Existing mining content | Online co-op | Not estimated |
 | **2b. Heists** | Moons | Guard AI, stealth | Not estimated |
 | **3. Planets** | Large planet maps | Melee combat, bosses | Not estimated |

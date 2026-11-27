@@ -24,6 +24,18 @@ After play: "and the enemies that pop up the longer you are on the asteroid shou
 After play: "i dont like that the rocks spin when you mine them they could just vibrate"
 After play: "find a model for the drill"
 After play: "find new more realistic models for the home and ship"
+After play: "the game looks absolutely horrible and the sounds are too arcadey"
+After play: "everything in the home looks cheap and hastily put together", and the creatures
+After play: picked "Tense and atmospheric" for the sounds
+After play: picked "Pivot it"
+After play: "the home stays but your home is on a planet in a small valley where you can freely build foundations, walls, floors, ceilings, roofs, stairs and other building parts as well as building your basic workbenches. findable in the valley is only rocks and sticks to build the basic house parts and workbenches to prepare for storms and craft basic weapons/drill for runs to the asteroids,planets,moons"
+After play: a storm that hits an unprepared home: picked "It damages or destroys what I built"
+After play: the stash in a storm: picked "Safe only if sheltered"
+After play: how storms arrive: picked "Forecast, with time to prepare"
+After play: weapons in the first game: picked "Not in the first game"
+After play: where the valley home belongs: picked "In the first game, replacing the home room"
+After play: asked whether "one more seam or leave now" felt tense, after a few minutes of play: "No, not really"
+After play: asked whether unpacking at home made them want to go straight back out: "Yes, and I wanted to go again"
 
 **Pitch:** Mine a bright little asteroid in first person, fill your pack while your oxygen drains and the rock wakes up, and get back to your ship before you lose it all.
 
@@ -68,14 +80,16 @@ The landing area is safe. Beyond it the threat is constant: oxygen drains the wh
 - [x] A limited pack with its worth on screen
 - [ ] The ship as the exit; death loses pack and tool
 - [ ] Home: a saved stash and one crafting bench with the better drill (thin stand-in)
+- [ ] Home valley: a small valley on a planet; gather rocks and sticks; build freely (foundations, walls, floors, ceilings, roofs, stairs) and set up basic workbenches
+- [ ] Storms: always forecast with time to prepare; they damage or destroy what is not built for them; the stash is safe only when sheltered
 
 ## Your systems
 - mining runs · in the slice
 - crafting · thin stand-in *(guessed)*
-- home space station · thin stand-in *(guessed)*
+- home valley on a planet (was: home space station) · the designer's pivot, not built yet
 - taking a spaceship · thin stand-in *(guessed)*
 - farming · later
-- building houses · later
+- building houses · in the first game (the designer's pivot), not built yet
 - moon thievery runs · later
 - planet melee extraction with bosses · later
 
@@ -88,11 +102,14 @@ The landing area is safe. Beyond it the threat is constant: oxygen drains the wh
 - Enemies "just sitting t-posing waiting to be activated"
 - Ore that spins when mined: "they could just vibrate"
 - Kenney's Space Station Kit in the home room: "i dont like the look of the home room"
-- Player-versus-player; mandatory home chores; a fixed story campaign; timers that force a run (from the concept's anti-pillars)
+- Player-versus-player; busywork upkeep at home (nothing decays by itself, nothing comes due; forecast storms are the one threat); a fixed story campaign; timers that force a run (from the concept's anti-pillars, as revised 2026-11-26)
+- A home that "looks cheap and hastily put together"
+- Sounds that are "too arcadey"
 
 ## Out of scope
 - Online co-op: needs a server, so not built; this build is solo
-- Farming, house building: add it as a feature
+- Farming: add it as a feature
+- Weapons: not in the first game
 - Moon heists, planet melee runs and bosses: grow it
 - A flyable ship and destination map: grow it
 - More asteroids, more tool and gear tiers: grow it
