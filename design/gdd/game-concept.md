@@ -10,7 +10,7 @@
 ## Elevator Pitch
 
 > It's a first-person co-op extraction game where you fly out from your
-> homestead into a bright toy-box solar system, grab everything you can carry,
+> homestead into a bright, sunlit solar system, grab everything you can carry,
 > and try to get home alive, because whatever you're holding when you die stays
 > there.
 
@@ -83,13 +83,13 @@ is handled by building one trade at a time (Pillar 4).
 - Players scout before committing: watching patrols, reading a boss, checking a seam.
 - Players plan runs around a home goal ("two more of these and I can build the forge").
 - Players specialise in a trade, then cross over because another trade holds a material they need.
-- Stay-home players supply crews with food, gear and tools, and process what crews bring back.
+- From Farming onward (after the first game), stay-home players supply crews with food, gear and tools, and process what crews bring back.
 
 ### Core Mechanics (Systems we build)
 
-1. **Extraction runs:** a limited pack, exits, and loss of everything carried on death. A failed run never touches what is stored at home.
+1. **Extraction runs:** a limited pack, exits, and loss of everything carried on death. A failed run never touches what is stored at home; only a storm can, and only a stash that is not under a roof.
 2. **Three trades:** asteroid mining, moon stealth heists, planet melee combat with bosses.
-3. **Home:** a small valley on a planet where the player builds freely (foundations, walls, floors, ceilings, roofs, stairs) and sets up workbenches. The valley offers only rocks and sticks; everything better comes back from runs. Storms are forecast and damage or destroy what is not built to withstand them; the stash is safe only inside an intact shelter. Farming comes later.
+3. **Home:** a small valley on a planet where the player builds freely (foundations, walls, floors, ceilings, roofs, stairs) and sets up workbenches. The valley offers only rocks and sticks; everything better comes back from runs. Storms are forecast and damage or destroy what is not built to withstand them; the stash is safe only under a roof. Farming comes later.
 4. **Progression:** gear tiers crafted from run materials; ship upgrades that unlock further, more dangerous destinations.
 5. **Co-op:** host-authoritative crews against AI.
 
@@ -120,10 +120,10 @@ to follow, a purely cozy game with nothing to lose, or slow turn-based strategy.
 
 ### Flow State Design
 
-- **Onboarding curve**: the first run is a short asteroid mining trip with one tool and one hazard. It teaches the whole game in miniature: fill the pack, watch the danger rise, get out.
+- **Onboarding curve**: the game starts in the valley home: gather rocks and sticks, build a first shelter and a workbench, craft a hammer and a basic drill, and see the first storm forecast with time to prepare. The first run is then a short asteroid mining trip with one tool and one hazard, which teaches the run in miniature: fill the pack, watch the danger rise, get out.
 - **Difficulty scaling**: the player sets it. Further destinations and deeper areas are more dangerous and richer; nothing forces the step up.
 - **Feedback clarity**: wealth is visible. The pack brightens with loot, the stash fills, the home grows.
-- **Recovery from failure**: death costs what was carried and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and anything stored outside an intact shelter can be lost.
+- **Recovery from failure**: death costs what was carried and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and a stash that is not under a roof loses its contents.
 
 ---
 
@@ -149,9 +149,15 @@ room" lives here.
 
 ### Session-Level (30-120 minutes)
 
-Prepare at home (craft gear, pack food from the farm, pick a destination and a
-trade) → fly out → the run → extract or die → unpack, sell, craft, build, plant
-→ pick the next run.
+In the first game: check the storm forecast → gather rocks and sticks, build,
+repair with the hammer and craft at the workbenches → launch a run to the
+asteroid (the forecast is shown before launch) → the run, with a notification if
+a storm is on the way → extract or die → unpack into the stash, craft, build
+stronger pieces from what the run brought back, prepare for the next storm →
+pick the next run.
+
+In the full game the same loop widens: pack food from the farm, pick a
+destination and a trade, fly out, and sell what comes back.
 
 | Trade | Destination | Run length | Character |
 | ---- | ---- | ---- | ---- |
@@ -172,9 +178,12 @@ Wealth grows along four tracks:
 3. **Home**: workshops, farm plots and the house itself, which unlock recipes and storage
 4. **Ship**, which unlocks further and more dangerous destinations
 
-The long-term goal is the richest home and the hardest bosses beaten. Staying
-home is a slower, safe income inside the same economy: farming and crafting make
-the food, gear and tools that runs use, and process what runs bring back.
+The long-term goal is the richest home and the hardest bosses beaten. In the
+first game, home spends what runs earn: the valley gives only rocks and sticks,
+and everything better comes from runs. Once Farming arrives, after the first
+game, staying home becomes a slower, safe income inside the same economy:
+farming and crafting make the food, gear and tools that runs use, and process
+what runs bring back.
 
 ### Retention Hooks
 
@@ -298,7 +307,7 @@ Civilization.
 
 | Consideration | Assessment |
 | ---- | ---- |
-| **Recommended Engine** | Unity 6.3 LTS (C#, URP), chosen with `/setup-engine`. The network model and save versioning are decided in ADR-0001 and ADR-0002. Still to address in later tiers: very large worlds (a floating origin, plus map streaming) and runtime-rebuilt navigation around player-built structures |
+| **Recommended Engine** | Unity 6.3 LTS (C#, URP), chosen with `/setup-engine`. The network model and save versioning are decided in ADR-0001 and ADR-0002; the built home and the storm clock are saved as decided in ADR-0003. Still to address in later tiers: very large worlds (a floating origin, plus map streaming) and runtime-rebuilt navigation around player-built structures |
 | **Key Technical Challenges** | Co-op designed in from day one; networked first-person melee; stealth guard AI and boss AI under netcode; persistence of a player-built home; large planet maps |
 | **Art Style** | 3D stylised realism: realistic light and textured surfaces on simplified, rounded shapes; facets reserved for ore. See `design/art/art-bible.md` |
 | **Art Pipeline Complexity** | High (custom 3D), reduced by the style. The cost is quantity, not fidelity |
@@ -316,12 +325,13 @@ Civilization.
 - Home could become a menu between runs. Mitigation: Pillar 5; home feeds the haul.
 - A harsh loss could feel wrong in a friendly-looking world. Pillar 3 chooses the sting; needs playtesting.
 - The stay-home path may be too slow to feel worthwhile, or so good that nobody runs.
+- The run's tension is unproven. Asked after a few minutes of the browser prototype whether "one more seam or leave now" felt tense, the designer answered "No, not really" (`prototypes/star-haul/REPORT.md`). With the valley home built first, it is not tested in Unity until Milestone B. Mitigation: play full runs and tune the prototype's `config.js` before Milestone B begins.
 
 ### Technical Risks
 - **Co-op cannot be bolted on later.** Decision taken: build for it from day one. All inventory, stash, crafting and world changes go through host-side checks even in solo play, with game state kept apart from presentation. A short ADR on the network model comes before any MVP code.
 - **Networked melee** needs lag compensation and host-confirmed hits. Prototype with simulated latency before Tier 3.
 - **Persistence in co-op**: whose home and stash it is, and stopping loot duplication when guests carry items between hosts. Decide before Tier 2a.
-- **Save migration**: patches can break player-built homes. Version save data from the MVP onward.
+- **Save migration**: patches can break player-built homes. Version save data from the MVP onward (ADR-0002; built homes and storms in ADR-0003).
 - **Large worlds**: float precision far from the origin (ship flight, planets).
 - **AI under netcode**: guard perception runs on the host only.
 - **Testing multiplayer alone**: needs multiple local instances and a latency simulator early.
@@ -334,13 +344,13 @@ Civilization.
 ### Scope Risks
 - Full vision is a multi-year goal for one developer, not a commitment. Each tier must stand as a finished game.
 - This is the designer's first first-person 3D game after two finished mobile games; the MVP will take longer than it looks, mostly on controller feel and hazard tuning.
-- Bosses, animation and big maps cost a lot even in low-poly.
+- Bosses, animation and big maps cost a lot.
 - Most likely cut point: partway through Tier 1. Splitting it into 1a and 1b makes that a graceful stop.
-- On 2026-11-26 the designer moved the buildable valley home, gathering and storms into the MVP, on top of the 20 systems already sized at 9 to 12 months. The MVP has not been re-sized, and the systems index, art bible, ADR-0002 and the Concept gate report predate the change.
+- On 2026-11-26 the designer moved the buildable valley home, gathering and storms into the MVP. On 2026-11-27 the producer sized the reworked 24-system MVP as one milestone at 14 to 20 months, solo, low confidence (PR-SCOPE: UNREALISTIC), and recommended building the asteroid run first. The designer chose two milestones with the valley home first: Milestone A, the valley home (systems 1 to 15), then Milestone B, the asteroid run (systems 16 to 24). The valley-first order has not been sized.
 
 ### Open Questions
 - Crew size for co-op. Answer during `/design-system` for co-op, before Tier 2a.
-- What the worsening hazard on an asteroid is. Answer with the MVP prototype.
+- What the worsening hazard on an asteroid is. Answered by the browser prototype: oxygen that drains all run, creatures that notice noise and sight, and hunters that rise the longer the player stays.
 - Does death also cost equipped gear, or only the pack? Current rule: everything carried. Test in the MVP.
 - Storms, answered by the designer on 2026-11-27: they come every 50 to 70 minutes of play; the clock keeps running during a run, with a clear notification when one is on the way, and does not run while the game is closed; a rock-and-stick shelter falls after 2 storms if not repaired, and is repaired with a hammer; a stash or furniture counts as sheltered if it is under a roof; building pieces snap to each other; one repair action fixes the whole home; materials from runs build stronger pieces that need little or no repair; a storm's strength is always shown, the forecast is visible before a run is launched, and a run of normal length cannot destroy a home that was ready at launch. Still open: how strong storms are and whether strength varies.
 - The stay-home path ("possible to stay on your home planet... the whole game just crafting and farming") arrives with Farming, after the first game (designer, 2026-11-27). In the first game a player who never leaves can keep a basic home standing but cannot progress.
@@ -354,6 +364,7 @@ Civilization.
 | AD-CONCEPT-VISUAL (art-director) | CONCEPTS (three directions) | Designer chose the recommended direction, Cargo Is the Colour |
 | TD-FEASIBILITY (technical-director) | CONCERNS | Viable as tiered. Co-op from day one adopted; remaining concerns recorded under Technical Risks |
 | PR-SCOPE (producer) | OPTIMISTIC | Adjusted tiers applied (Tier 1 and Tier 2 each split in two). Not re-run after adjustment |
+| PR-SCOPE (producer), 2026-11-27, on the reworked systems index | UNREALISTIC | 14 to 20 months as one milestone; recommended the asteroid run first. The designer chose the valley home first (Milestone A), not sized |
 
 ---
 
@@ -362,6 +373,10 @@ Civilization.
 **Core hypothesis**: "One more seam or leave now" is tense on a 10 to 15 minute
 asteroid mining run, and unpacking the haul at home is satisfying enough to make
 the player go straight back out.
+
+Only Milestone B tests this hypothesis. Milestone A, the valley home, proves the
+home and the toolchain, not the fantasy: Pillar 1, getting rich and "one more
+seam" wait for the run.
 
 **Required for MVP**:
 1. One asteroid, one mining tool, and a pack with limited space
@@ -373,7 +388,7 @@ the player go straight back out.
 **Explicitly NOT in MVP** (defer to later):
 - Co-op play itself (the architecture allows for it; the feature is Tier 2a)
 - Farming
-- Weapons (the drill is the only tool; melee arrives with the planet trade)
+- Weapons (the drill and the hammer are the only tools; melee arrives with the planet trade)
 - Heists, melee combat, bosses
 - The ship as a flyable vehicle and the destination map
 
@@ -385,7 +400,7 @@ assessed by the producer.
 
 | Tier | Content | Features | Timeline (estimate) |
 | ---- | ---- | ---- | ---- |
-| **MVP** | One asteroid, the home valley | Mining run, pack, hazard, exit, stash; a buildable valley home with gathering, workbenches and forecast storms. See `design/gdd/systems-index.md`, which predates the valley home and is being reworked | Not re-sized since the valley home was added. Before it: 9 to 12 months (producer's estimate, low confidence; originally 2 to 4) |
+| **MVP** | One asteroid, the home valley | Built as two milestones: A, the valley home (gathering, building, workbenches, stash, forecast storms); then B, the asteroid run (mining, pack, hazard, exit). `design/gdd/systems-index.md` is the authoritative MVP system list (24 systems) | 14 to 20 months as one milestone (producer, 2026-11-27, low confidence); the valley-first order has not been sized. Earlier estimates: 9 to 12 months, originally 2 to 4 |
 | **1a. The mining game** | Several asteroids | Tool and gear tiers, crafting, stash. The first finish line | Not estimated |
 | **1b. Home and ship** | Destination map | Basic farming, ship (the buildable home moved into the MVP on 2026-11-26) | Not estimated |
 | **2a. Crew** | Existing mining content | Online co-op | Not estimated |
@@ -397,13 +412,13 @@ assessed by the producer.
 
 ## Next Steps
 
-- [ ] Prototype the core idea (`/prototype`): the asteroid mining run, before any GDD
-- [ ] Choose and pin the engine (`/setup-engine`)
-- [ ] Author the art bible from the Visual Identity Anchor (`/art-bible`)
+- [x] Prototype the core idea (`/prototype`): the asteroid mining run, before any GDD
+- [x] Choose and pin the engine (`/setup-engine`)
+- [x] Author the art bible from the Visual Identity Anchor (`/art-bible`)
 - [ ] Check this concept is complete (`/design-review design/gdd/game-concept.md`)
-- [ ] Decompose the concept into systems (`/map-systems`)
+- [x] Decompose the concept into systems (`/map-systems`)
 - [ ] Design each system (`/design-system [system-name]`)
-- [ ] Write the network-model ADR before MVP code (`/architecture-decision`)
+- [x] Write the network-model ADR before MVP code (`/architecture-decision`)
 - [ ] Build a vertical slice in Pre-Production (`/vertical-slice`)
 - [ ] Validate the core loop with a playtest (`/playtest-report`)
 - [ ] Plan the first milestone (`/sprint-plan new`)
