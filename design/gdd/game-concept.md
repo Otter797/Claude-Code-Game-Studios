@@ -123,7 +123,7 @@ to follow, a purely cozy game with nothing to lose, or slow turn-based strategy.
 - **Onboarding curve**: the game starts in the valley home: gather rocks and sticks, build a first shelter and a workbench, craft a hammer and a basic drill, and see the first storm forecast with time to prepare. The first run is then a short asteroid mining trip with one tool and one hazard, which teaches the run in miniature: fill the pack, watch the danger rise, get out.
 - **Difficulty scaling**: the player sets it. Further destinations and deeper areas are more dangerous and richer; nothing forces the step up.
 - **Feedback clarity**: wealth is visible. The pack brightens with loot, the stash fills, the home grows.
-- **Recovery from failure**: death costs what was carried and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and a stash that is not under a roof loses its contents.
+- **Recovery from failure**: death costs what was carried (the pack, the tool and equipped gear) and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and a stash that is not under a roof loses its contents. What backs "never ends a save": from an empty pack and an empty valley, bare hands plus rocks and sticks can always reach a workbench, a hammer and a basic drill (owned by the Gathering and Crafting design docs). Even after losing the tools, the home and the stash together, the player can always start again.
 
 ---
 
@@ -131,21 +131,28 @@ to follow, a purely cozy game with nothing to lose, or slow turn-based strategy.
 
 ### Moment-to-Moment (30 seconds)
 
-You move carefully through a hostile place, listening and watching. You open a
-container and weigh what to take against limited pack space, then decide whether
-the next room is worth it. A fight is a few committed swings, blocks and dodges
-where stamina and timing decide it.
+In the first game, on the asteroid: you move carefully across the rock, watching
+your oxygen and listening for creatures. You find a seam and read what it is
+worth, then decide whether to drill it. Drilling takes a few seconds and makes
+noise that carries, so every seam is a small bet: ore into the pack against
+oxygen spent and the chance of waking something nearby. There are no weapons.
 
 The feel is **tense and deliberate**. It satisfies on its own because every
-action has a visible cost and a readable result: noise draws attention, a missed
-swing leaves you open, a full pack slows you down.
+action has a visible cost and a readable result: drilling is loud, oxygen only
+goes down, a full pack has no room for the better seam you find next.
+
+In the full game the same beat carries over to the other trades: opening a
+container in a guarded room on a moon heist, or a few committed swings, blocks
+and dodges in a planet fight.
 
 ### Short-Term (5-15 minutes)
 
-Scout, commit, loot, reassess. Each cycle ends on the same choice: push deeper
-for better loot, or head for the exit with what you have. The pack fills while
-health and supplies drain, so pressure rises with the value carried. "One more
-room" lives here.
+Scout, drill, reassess. Each cycle ends on the same choice: push deeper for
+richer seams, or walk back to the ship with what you have. The pack fills while
+oxygen drains and hunters rise the longer you stay, so pressure rises with the
+value carried. A storm alert can arrive during the run; it tells you what is
+coming at home, but it never forces you to leave. "One more seam" lives here
+("one more room" in the full game).
 
 ### Session-Level (30-120 minutes)
 
@@ -342,16 +349,16 @@ Civilization.
 - This is a hobby project; no commercial target is set.
 
 ### Scope Risks
-- Full vision is a multi-year goal for one developer, not a commitment. Each tier must stand as a finished game.
+- Full vision is a multi-year goal for one developer, not a commitment. Each tier must stand as a finished game; Milestone A is an internal milestone inside the MVP, not a tier, and cannot ship on its own.
 - This is the designer's first first-person 3D game after two finished mobile games; the MVP will take longer than it looks, mostly on controller feel and hazard tuning.
 - Bosses, animation and big maps cost a lot.
-- Most likely cut point: partway through Tier 1. Splitting it into 1a and 1b makes that a graceful stop.
+- Most likely cut point: inside the MVP, after Milestone A or partway through Milestone B. Milestone A is not a finished game: it has no run, so nothing in it tests the core hypothesis or Pillar 1. The first finish line is the end of Milestone B. Splitting Tier 1 into 1a and 1b keeps later stops graceful.
 - On 2026-11-26 the designer moved the buildable valley home, gathering and storms into the MVP. On 2026-11-27 the producer sized the reworked 24-system MVP as one milestone at 14 to 20 months, solo, low confidence (PR-SCOPE: UNREALISTIC), and recommended building the asteroid run first. The designer chose two milestones with the valley home first: Milestone A, the valley home (systems 1 to 15), then Milestone B, the asteroid run (systems 16 to 24). The valley-first order has not been sized.
 
 ### Open Questions
 - Crew size for co-op. Answer during `/design-system` for co-op, before Tier 2a.
 - What the worsening hazard on an asteroid is. Answered by the browser prototype: oxygen that drains all run, creatures that notice noise and sight, and hunters that rise the longer the player stays.
-- Does death also cost equipped gear, or only the pack? Current rule: everything carried. Test in the MVP.
+- Does death also cost equipped gear, or only the pack? Answered: death loses everything carried, which is the pack, the tool and equipped gear (`design/game-brief.md`; saved as `carried` in ADR-0003). The next run starts from a basic drill the player can always make from valley materials (see Recovery from failure).
 - Storms, answered by the designer on 2026-11-27: they come every 50 to 70 minutes of play; the clock keeps running during a run, with a clear notification when one is on the way, and does not run while the game is closed; a rock-and-stick shelter falls after 2 storms if not repaired, and is repaired with a hammer; a stash or furniture counts as sheltered if it is under a roof; building pieces snap to each other; one repair action fixes the whole home; materials from runs build stronger pieces that need little or no repair; a storm's strength is always shown, the forecast is visible before a run is launched, and a run of normal length cannot destroy a home that was ready at launch. Still open: how strong storms are and whether strength varies.
 - The stay-home path ("possible to stay on your home planet... the whole game just crafting and farming") arrives with Farming, after the first game (designer, 2026-11-27). In the first game a player who never leaves can keep a basic home standing but cannot progress.
 - How a stay-home player earns: trading with crews, a market, or both?
@@ -395,8 +402,10 @@ seam" wait for the run.
 ### Scope Tiers (if budget/time shrinks)
 
 Each tier is a finished game on its own and adds one new risk. If time runs out,
-the last completed tier ships. Timelines are estimates, solo, and were not
-assessed by the producer.
+the last completed tier ships. The MVP is a tier only once both of its
+milestones are done; Milestone A alone does not ship. Timelines are estimates,
+solo. The producer sized only the MVP, as one milestone (PR-SCOPE, 2026-11-27);
+the valley-first order and all later tiers are not sized.
 
 | Tier | Content | Features | Timeline (estimate) |
 | ---- | ---- | ---- | ---- |

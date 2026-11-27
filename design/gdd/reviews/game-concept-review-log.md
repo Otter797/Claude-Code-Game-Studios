@@ -30,3 +30,39 @@ Reviewed-Content-Hash: design/gdd/systems-index.md 428035db4e6d01a929dbc5446096e
 Reviewed-Content-Hash: design/game-brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
 Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
 Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
+
+## Review — 2026-11-27 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: XL (full vision; producer should verify)
+Specialists: game-designer, systems-designer, economy-designer, producer; senior: creative-director
+Blocking items: 3 | Recommended: 11
+Summary: Re-review in a fresh session. The fixes in 1751ea1 worked: pillars, storm rules and the milestone order hold together. Three text problems remained: the 30-second and short-term loops described the old game (rooms, melee) instead of the mining run; "failure never ends a save" had nothing behind it once death takes the tool and storms can empty a roofless stash; and the scope section contradicted itself (producer "did not assess" vs the producer's 14-20 months; cut point "partway through Tier 1" vs after Milestone A, which is not a finished game). Checked against the concept template, not the 8-section GDD standard; registry empty, values checked by hand.
+Prior verdict resolved: Partly (items 2 and 3 resolved; item 1 mostly, finished by new blocking 3; item 4 partly, finished by new blocking 1)
+Findings:
+- [BLOCKING] Core Loop (Moment-to-Moment, Short-Term): describes containers, rooms and melee; no seam loop although the MVP has no weapons and the hypothesis is about seams
+- [BLOCKING] Flow / Open Questions: "never ends a save" unbacked; no guarantee a stripped player can rebuild workbench, hammer and drill; death-cost question still open though the brief and ADR-0003 settle it
+- [BLOCKING] Scope Risks / Scope Tiers: "not assessed by the producer" vs the producer's MVP figure; stale likeliest cut point; Milestone A vs "each tier is a finished game"
+- [RECOMMENDED] Economy: no lasting MVP ore sink, stash total is a number (Pillar 5); gates the Ore & Item Economy GDD
+- [RECOMMENDED] Economy: storm damage to strong pieces stays above zero; rock-and-stick repair costs valley materials only; all vs part of an unsheltered stash lost, with a one-storm warning; money in the first game or not
+- [RECOMMENDED] Open Questions: hard cap on "normal length" (planets "45+" unbounded); no full-strength storm flattens a fully repaired piece in one hit; launch screen shows "survives N more storms"
+- [RECOMMENDED] Core Mechanics L90: say storms during a run are applied when it ends
+- [RECOMMENDED] systems-index.md L45 ("competes with getting home to repair the roof") conflicts with the settled rule that a storm never forces a run to end; fix the index
+- [RECOMMENDED] MDA Submission row "with no timers"; Autonomy "whether to run at all" vs L356
+- [RECOMMENDED] Core Fantasy proof moments and return hooks/long-term goal cite rooms, bosses and crops, absent from the first game
+- [RECOMMENDED] Design Risks: the prototype tension retest should gate the Ore & Item Economy GDD and record the kill condition; add it and /estimate to Next Steps
+- [RECOMMENDED] Open Questions: how a weaponless player handles creatures (prototype drill stuns); for the Creature AI GDD
+- [RECOMMENDED] Scope Tiers: 1a lists MVP systems; Vertical Slice systems 25-28 in no tier; "first game"/MVP/1a/Alpha naming; "4 to 6+ years" pre-pivot; Content Volume and network-ADR lines stale; Storms and Home HUD depend on Run Flow (Milestone B); old PR-SCOPE row superseded
+- [RECOMMENDED] Next Steps: leave "Check this concept is complete" unticked until APPROVED
+
+Creative-director rulings on specialist disagreements: scope item = BLOCKING (producer over game-designer); tool recovery = BLOCKING (overrides the first review's RECOMMENDED for hammer-on-death, because storms can now empty a roofless stash); missing ore sink = RECOMMENDED, gates the Ore & Item Economy GDD; mining loop = BLOCKING (Session-Level already splits first game from full game).
+
+Revision applied the same day (designer approved, "Fix all and log it"): all 3 blocking items fixed in `design/gdd/game-concept.md` (Moment-to-Moment and Short-Term rewritten for the mining run with the full-game beat kept; recovery rule "bare hands plus rocks and sticks can always reach a workbench, a hammer and a basic drill", owned by Gathering and Crafting; death-cost question closed as pack, tool and equipped gear; scope preamble, cut point and Milestone A status corrected). Not re-reviewed. Recommended items open.
+
+Receipt note: `design/gdd/game-concept.md` is deliberately not stamped, because it was revised after this review; the next `/design-review` will see it as NEW and run in full.
+Reviewed-Content-Hash: design/registry/entities.yaml dfeacb02917f751cb1dfd88cf490c7ec3d8d2d0f
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/systems-index.md 428035db4e6d01a929dbc5446096e42d1a97d279
+Reviewed-Content-Hash: design/game-brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
+Reviewed-Content-Hash: production/gate-checks/2026-11-26-concept-to-systems-design.md 19a1d23caf1509c2b2548aadeb8366b0f0cd0bcf
