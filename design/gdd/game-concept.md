@@ -236,12 +236,17 @@ stand in, this pillar picks the workshop.
 
 **Direction: Cargo Is the Colour**
 
+> **Updated 2026-11-26.** The look is now stylised realism, chosen by the
+> designer after playing the prototype. `design/art/art-bible.md` Section 1 is
+> the current word on the look; the rule and the three principles below are
+> unchanged.
+
 **Visual rule:** *The most saturated thing on screen is always something you
 could carry home.*
 
 Supporting principles:
 
-1. **Loot owns saturation and gloss.** The world is chunky, rounded and flat-shaded in chalky mid-saturation pastels; loot is the only faceted, glossy, fully saturated geometry, and rarity reads as saturation. *Design test*: debating a vivid environment prop or a muted one, pick the muted one, so loot keeps the eye.
+1. **Loot owns saturation and gloss.** The world is smooth, matte and naturally coloured: textured rock in stone colours with a soft pastel cast, under real light and shadow; loot is the only faceted, glossy, fully saturated geometry, and rarity reads as saturation. *Design test*: debating a vivid environment prop or a muted one, pick the muted one, so loot keeps the eye.
 2. **One hue means danger.** Hot magenta is reserved for threat and is used for nothing else. *Design test*: debating magenta for a decorative flower or a rare gem, the answer is no; pick another hue.
 3. **Home brightens with wealth.** As the stash fills and the home is built, the home becomes the most colourful place in the game. *Design test*: debating showing wealth as a counter or as displayed, coloured objects, pick the objects.
 
@@ -292,9 +297,9 @@ Civilization.
 
 | Consideration | Assessment |
 | ---- | ---- |
-| **Recommended Engine** | Undecided. The designer has no preference; `/setup-engine` makes the choice. Capabilities it must weigh: mature multiplayer with Steam networking, very large worlds (64-bit coordinates or a floating origin, plus map streaming), runtime-rebuilt navigation around player-built structures, save versioning tools |
+| **Recommended Engine** | Unity 6.3 LTS (C#, URP), chosen with `/setup-engine`. The network model and save versioning are decided in ADR-0001 and ADR-0002. Still to address in later tiers: very large worlds (a floating origin, plus map streaming) and runtime-rebuilt navigation around player-built structures |
 | **Key Technical Challenges** | Co-op designed in from day one; networked first-person melee; stealth guard AI and boss AI under netcode; persistence of a player-built home; large planet maps |
-| **Art Style** | 3D stylized: flat-shaded low-poly, palette-swatch materials, no painted textures |
+| **Art Style** | 3D stylised realism: realistic light and textured surfaces on simplified, rounded shapes; facets reserved for ore. See `design/art/art-bible.md` |
 | **Art Pipeline Complexity** | High (custom 3D), reduced by the style. The cost is quantity, not fidelity |
 | **Audio Needs** | Moderate. Sound is gameplay in a tense, deliberate game: noise, footsteps, guard awareness |
 | **Networking** | Host-authoritative co-op. Solo play runs as a host with one player, from the first build |
@@ -376,7 +381,7 @@ assessed by the producer.
 
 | Tier | Content | Features | Timeline (estimate) |
 | ---- | ---- | ---- | ---- |
-| **MVP** | One asteroid | Mining run, pack, hazard, exit, stash, one bench | 2 to 4 months |
+| **MVP** | One asteroid | Mining run, pack, hazard, exit, stash, one bench. 20 systems; see `design/gdd/systems-index.md` | 9 to 12 months (producer's estimate, low confidence; originally 2 to 4) |
 | **1a. The mining game** | Several asteroids | Tool and gear tiers, crafting, stash. The first finish line | Not estimated |
 | **1b. Home and ship** | Home plot, destination map | Basic farming, buildable home, ship | Not estimated |
 | **2a. Crew** | Existing mining content | Online co-op | Not estimated |
