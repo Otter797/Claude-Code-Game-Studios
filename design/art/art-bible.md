@@ -13,10 +13,11 @@ holding its placeholder is incomplete; a later run fills only those.
 
 **Direction: Cargo Is the Colour**
 
-This section supersedes the "Visual Identity Anchor" in
-`design/gdd/game-concept.md`, which still describes a flat-shaded low-poly world.
-The rule and its three principles are unchanged; the look is now stylised
-realism, chosen by the designer after playing the prototype.
+This section is the current word on the look and takes precedence over the
+"Visual Identity Anchor" in `design/gdd/game-concept.md`. That anchor originally
+described a flat-shaded low-poly world; it was updated on 2026-11-26 to match
+and now points here. The rule and its three principles are unchanged; the look
+is stylised realism, chosen by the designer after playing the prototype.
 
 ### Visual rule
 
