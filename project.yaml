@@ -41,6 +41,8 @@ engine:
   rendering: "URP"
   physics: "PhysX"
   path: "C:/Unity/Editor/6000.3.29f1/Editor/Unity.exe"
+  code_root: "StarHaul/Assets"
+  # test_root: "StarHaul/Assets/Tests"   # add when the folder exists (/test-setup); a missing folder makes the value invalid
 
 specialists:
   code: "unity-specialist"
