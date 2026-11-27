@@ -364,11 +364,12 @@ Effort estimates: S = 1 session, M = 2-3 sessions, L = 4+ sessions. A "session"
 is one focused design conversation producing a complete GDD. These are design
 effort, not build effort; the Producer Note above covers build time.
 
-**Before design doc 7 (Save & Load):** write the home and storm persistence ADR
-(`/architecture-decision`). Design docs 11, 12 and 14 also wait on it.
+**Home and storm persistence:** ADR-0003 is written and Accepted (2026-11-27,
+amended the same day after `/architecture-review`), so design docs 7, 11, 12 and
+14 are no longer waiting on it.
 
-ADR-0001 and ADR-0002 are Accepted; design docs must not contradict them.
-ADR-0002 will be amended or superseded in part by the new ADR.
+ADR-0001, ADR-0002 and ADR-0003 are Accepted; design docs must not contradict
+them. ADR-0003 amends ADR-0002 clause by clause; ADR-0002 stays Accepted.
 
 ---
 
@@ -393,7 +394,7 @@ None remaining. Two near-cycles were found and removed:
 | System | Risk Type | Risk Description | Mitigation |
 |--------|-----------|-----------------|------------|
 | Building | Technical / Scope | The costliest system and the main bottleneck: snapping, per-piece condition, repair, the roof check, host authority and versioned saves; five systems read its piece model | Design the piece model first; keep damage and repair behind a narrow interface; split out Structure Integrity if the design doc outgrows its size |
-| Save & Load, with the new ADR | Technical | ADR-0002 does not cover built structures, the storm clock or storms during a run; four design docs are blocked until a new ADR exists | Write the ADR before design doc 7 |
+| Save & Load, with ADR-0003 | Technical | Saving hundreds of built pieces, the storm clock and storms during a run; a background save writer and a 1 ms snapshot budget that is not yet measured | ADR-0003 (Accepted) covers the design; measure the snapshot with a generated 2,000-piece home early in Milestone A |
 | Storms | Design | Storms can destroy what the player built and take an unsheltered stash; they run during runs. If they feel unfair or like a chore, they break the rewritten anti-pillars | Always forecast, with strength shown; one repair action fixes the whole home; stronger tiers from run materials need little or no repair; test the 50 to 70 minute cycle and the two-storm rule early in Milestone A |
 | Session & Authority | Technical | A networked host on a post-cutoff engine version, on the developer's first 3D game; every mechanic pays its cost | ADR-0001's fallback (in-process host behind `ISessionHost`); reassess after the first mechanic is built end to end |
 | The asteroid run's tension | Design | The unproven half of the core hypothesis ("No, not really" after a few minutes of play). With the valley built first it is not tested in Unity until Milestone B | Test it now in the browser prototype: full runs, then tune `config.js` (`prototypes/star-haul/REPORT.md`) |
@@ -420,7 +421,7 @@ None remaining. Two near-cycles were found and removed:
 ## Next Steps
 
 - [x] Review and approve this systems enumeration (designer, 2026-11-27)
-- [ ] Write the home and storm persistence ADR (`/architecture-decision`)
+- [x] Write the home and storm persistence ADR (`/architecture-decision`): ADR-0003, Accepted 2026-11-27
 - [ ] Design MVP-tier systems first (use `/design-system [system-name]`), starting with Game Data & Tuning
 - [ ] Run `/design-review` on each completed GDD
 - [ ] Run `/gate-check technical-setup` when MVP systems are designed
