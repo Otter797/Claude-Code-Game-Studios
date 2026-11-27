@@ -123,7 +123,7 @@ to follow, a purely cozy game with nothing to lose, or slow turn-based strategy.
 - **Onboarding curve**: the game starts in the valley home: gather rocks and sticks, build a first shelter and a workbench, craft a hammer and a basic drill, and see the first storm forecast with time to prepare. The first run is then a short asteroid mining trip with one tool and one hazard, which teaches the run in miniature: fill the pack, watch the danger rise, get out.
 - **Difficulty scaling**: the player sets it. Further destinations and deeper areas are more dangerous and richer; nothing forces the step up.
 - **Feedback clarity**: wealth is visible. The pack brightens with loot, the stash fills, the home grows.
-- **Recovery from failure**: death costs what was carried (the pack, the tool and equipped gear) and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and a stash that is not under a roof loses its contents. What backs "never ends a save": from an empty pack and an empty valley, bare hands plus rocks and sticks can always reach a workbench, a hammer and a basic drill (owned by the Gathering and Crafting design docs). Even after losing the tools, the home and the stash together, the player can always start again.
+- **Recovery from failure**: death costs what was carried (the pack, the tool and equipped gear) and nothing else. The stash and home are untouched, so a new run can start at once with spare gear. Failure stings (Pillar 3) but never ends a save. A storm is the one thing that can cost the player at home: it damages what was not built for it, and a stash that is not under a roof loses its contents. What backs "never ends a save": rocks and sticks always come back in the valley, so the valley can never be used up. From an empty pack, an empty stash and a flattened home, bare hands plus rocks and sticks can always reach a workbench, a hammer, a basic drill, everything a run needs to launch, and at least one repair of a rock-and-stick shelter. The target for that rebuild is well under the 50-minute minimum storm interval (suggested: 10 minutes or less). Owners: Home Valley (rocks and sticks coming back), Gathering and Crafting (the rebuild path and its time). Even after losing the tools, the home and the stash together, the player can always start again.
 
 ---
 
@@ -332,7 +332,7 @@ Civilization.
 - Home could become a menu between runs. Mitigation: Pillar 5; home feeds the haul.
 - A harsh loss could feel wrong in a friendly-looking world. Pillar 3 chooses the sting; needs playtesting.
 - The stay-home path may be too slow to feel worthwhile, or so good that nobody runs.
-- The run's tension is unproven. Asked after a few minutes of the browser prototype whether "one more seam or leave now" felt tense, the designer answered "No, not really" (`prototypes/star-haul/REPORT.md`). With the valley home built first, it is not tested in Unity until Milestone B. Mitigation: play full runs and tune the prototype's `config.js` before Milestone B begins.
+- The run's tension is unproven. Asked after a few minutes of the browser prototype whether "one more seam or leave now" felt tense, the designer answered "No, not really" (`prototypes/star-haul/REPORT.md`). With the valley home built first, it is not tested in Unity until Milestone B. Mitigation: retest it in the browser prototype **before Milestone A begins**, which costs days, not months: play full runs, tune `config.js`, play again. Failure condition (the prototype brief's kill condition, marked there as guessed, so the designer may restate it): leaving still never feels like a hard choice after two tuning rounds. If it fails, the designer decides what happens next before Milestone A starts; the valley-first order itself is not changed by this rule.
 
 ### Technical Risks
 - **Co-op cannot be bolted on later.** Decision taken: build for it from day one. All inventory, stash, crafting and world changes go through host-side checks even in solo play, with game state kept apart from presentation. A short ADR on the network model comes before any MVP code.
@@ -360,7 +360,7 @@ Civilization.
 - What the worsening hazard on an asteroid is. Answered by the browser prototype: oxygen that drains all run, creatures that notice noise and sight, and hunters that rise the longer the player stays.
 - Does death also cost equipped gear, or only the pack? Answered: death loses everything carried, which is the pack, the tool and equipped gear (`design/game-brief.md`; saved as `carried` in ADR-0003). The next run starts from a basic drill the player can always make from valley materials (see Recovery from failure).
 - Storms, answered by the designer on 2026-11-27: they come every 50 to 70 minutes of play; the clock keeps running during a run, with a clear notification when one is on the way, and does not run while the game is closed; a rock-and-stick shelter falls after 2 storms if not repaired, and is repaired with a hammer; a stash or furniture counts as sheltered if it is under a roof; building pieces snap to each other; one repair action fixes the whole home; materials from runs build stronger pieces that need little or no repair; a storm's strength is always shown, the forecast is visible before a run is launched, and a run of normal length cannot destroy a home that was ready at launch. Still open: how strong storms are and whether strength varies.
-- The stay-home path ("possible to stay on your home planet... the whole game just crafting and farming") arrives with Farming, after the first game (designer, 2026-11-27). In the first game a player who never leaves can keep a basic home standing but cannot progress.
+- The stay-home path ("possible to stay on your home planet... the whole game just crafting and farming") arrives with Farming, after the first game (designer, 2026-11-27). In the first game a player who never leaves can keep a basic home standing, because rocks and sticks always come back (see Recovery from failure), but cannot progress.
 - How a stay-home player earns: trading with crews, a market, or both?
 
 ### Director Review Record
@@ -410,7 +410,7 @@ the valley-first order and all later tiers are not sized.
 | Tier | Content | Features | Timeline (estimate) |
 | ---- | ---- | ---- | ---- |
 | **MVP** | One asteroid, the home valley | Built as two milestones: A, the valley home (gathering, building, workbenches, stash, forecast storms); then B, the asteroid run (mining, pack, hazard, exit). `design/gdd/systems-index.md` is the authoritative MVP system list (24 systems) | 14 to 20 months as one milestone (producer, 2026-11-27, low confidence); the valley-first order has not been sized. Earlier estimates: 9 to 12 months, originally 2 to 4 |
-| **1a. The mining game** | Several asteroids | Tool and gear tiers, crafting, stash. The first finish line | Not estimated |
+| **1a. The mining game** | Several asteroids | Tool and gear tiers, crafting, stash. The first expansion after the MVP (the first finish line is the end of Milestone B) | Not estimated |
 | **1b. Home and ship** | Destination map | Basic farming, ship (the buildable home moved into the MVP on 2026-11-26) | Not estimated |
 | **2a. Crew** | Existing mining content | Online co-op | Not estimated |
 | **2b. Heists** | Moons | Guard AI, stealth | Not estimated |
@@ -426,6 +426,7 @@ the valley-first order and all later tiers are not sized.
 - [x] Author the art bible from the Visual Identity Anchor (`/art-bible`)
 - [ ] Check this concept is complete (`/design-review design/gdd/game-concept.md`)
 - [x] Decompose the concept into systems (`/map-systems`)
+- [ ] Retest the run's tension in the browser prototype (full runs, two tuning rounds) before Milestone A begins
 - [ ] Design each system (`/design-system [system-name]`)
 - [x] Write the network-model ADR before MVP code (`/architecture-decision`)
 - [ ] Build a vertical slice in Pre-Production (`/vertical-slice`)

@@ -66,3 +66,42 @@ Reviewed-Content-Hash: design/game-brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cd
 Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
 Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
 Reviewed-Content-Hash: production/gate-checks/2026-11-26-concept-to-systems-design.md 19a1d23caf1509c2b2548aadeb8366b0f0cd0bcf
+
+## Review — 2026-11-27 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: XL (full vision; producer should verify)
+Specialists: game-designer, systems-designer, economy-designer, producer; senior: creative-director
+Blocking items: 3 | Recommended: 11 new (plus 1 known item that got worse)
+Summary: Third review, in a fresh session. The fixes in 58739d3 closed the mining-loop and scope blockers. Three text problems remained: "never ends a save" depended on valley rocks and sticks coming back, which ADR-0003 leaves open; the tension retest was scheduled after all of Milestone A although the prototype found the run "not really" tense; and the scope fix created a second "first finish line" at Tier 1a. Checked against the concept template; registry empty, values checked by hand against ADR-0003, the brief and the systems index.
+Prior verdict resolved: Partly (items 1 and 3 resolved; item 2 backed but depended on an undecided rule, finished by new blocking 1; the fix to item 3 created new blocking 3)
+Findings:
+- [BLOCKING] Flow (Recovery from failure) / Open Questions: recovery guarantee rests on undecided valley regrowth; "from an empty valley" contradicts itself; also backs the stay-home "keep a basic home standing" rule
+- [BLOCKING] Design Risks / Next Steps: tension retest scheduled "before Milestone B", after unsized Milestone A; no failure condition written
+- [BLOCKING] Scope Tiers: Tier 1a labelled "The first finish line" vs Scope Risks "the end of Milestone B"
+- [RECOMMENDED] Open Questions: death-cost line cites the brief for "equipped gear", but the brief says "pack and tool"; decide whether the hammer goes on runs
+- [RECOMMENDED] Core Mechanics / Flow: write "death, crash or quit during a run" (ADR-0002/0003 rule)
+- [RECOMMENDED] Core Mechanics / Flow: a roof falling in a storm empties the stash under it in the same storm (ADR-0003 Decision 6)
+- [RECOMMENDED] Open Questions: storm clock runs while the game is unfocused in the background (ADR-0003); question for the Storms design doc
+- [RECOMMENDED] Open Questions: define "ready at launch" (full condition) and "normal length" (ends before oxygen runs out)
+- [RECOMMENDED] Economy: the basic drill cannot cut the richest seams, so good gear is worth risking
+- [RECOMMENDED] Open Questions: what a woken creature does to a player with no weapons, and the warning before it is lethal (Creature AI design doc)
+- [RECOMMENDED] Flow (Onboarding): target time from a new game to the first launch (First-Run Guidance)
+- [RECOMMENDED] MVP Definition: "a hazard" (L390) vs three hazards (Open Questions)
+- [RECOMMENDED] Scope Risks: say a stop before the end of Milestone B ships nothing
+- [RECOMMENDED] Core Identity / naming: MVP exception on "each tier is a finished game"; define "first game = MVP = Milestones A and B" once
+- [RECOMMENDED, worse] Economy: no lasting MVP ore sink (death spares stockpiled spares; strong pieces need little repair); gates the Ore & Item Economy GDD
+- Production note (not a gate item): /estimate Milestone A before /sprint-plan
+
+Creative-director rulings on specialist disagreements: retest timing = BLOCKING (game-designer over the second review's RECOMMENDED; it does not reorder the milestones); Tier 1a finish line = BLOCKING (producer); regrowth = BLOCKING (consistent with the second review's tool-recovery ruling; rates belong to Home Valley); pack, suit and oxygen items folded into blocking 1 as "everything a run needs to launch". The director's suggested retest consequence ("redesign the run before building the valley") was not written, because it would override the designer's settled valley-first order; the concept leaves that decision to the designer.
+
+Revision applied the same day (designer approved, "Fix all and log it"): all 3 blocking items fixed in `design/gdd/game-concept.md` (recovery invariant with rocks and sticks always coming back, everything a run needs to launch, one shelter repair, a rebuild-time target of 10 minutes or less as a suggestion, and Home Valley added as an owner; retest moved before Milestone A with the prototype brief's kill condition, marked as guessed, and the decision on failure left to the designer, plus a Next Steps item; Tier 1a relabelled "the first expansion after the MVP"). Not re-reviewed. Recommended items open.
+
+Receipt note: `design/gdd/game-concept.md` is deliberately not stamped, because it was revised after this review; the next `/design-review` will see it as NEW and run in full.
+Reviewed-Content-Hash: design/registry/entities.yaml dfeacb02917f751cb1dfd88cf490c7ec3d8d2d0f
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/systems-index.md 428035db4e6d01a929dbc5446096e42d1a97d279
+Reviewed-Content-Hash: design/game-brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
+Reviewed-Content-Hash: production/gate-checks/2026-11-26-concept-to-systems-design.md 19a1d23caf1509c2b2548aadeb8366b0f0cd0bcf
+Reviewed-Content-Hash: prototypes/star-haul/brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
