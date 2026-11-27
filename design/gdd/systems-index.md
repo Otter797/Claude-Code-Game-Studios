@@ -147,9 +147,14 @@ Narrative is not used: the concept has no story campaign (anti-pillar).
 > foundation systems were already built; valley-first also carries them.
 >
 > **Risk accepted by the designer:** the run's tension, the unproven half of the
-> core hypothesis, is not tested in Unity until Milestone B. It can still be
-> tested cheaply now in the browser prototype (full runs, then tuning
-> `config.js`); see `prototypes/star-haul/REPORT.md`.
+> core hypothesis, is not tested in Unity until Milestone B. **Gate:** it is
+> retested in the browser prototype before the first `/design-system` run, and
+> in any case before any design doc for Oxygen, Hunter Escalation, Mining or
+> Ore & Item Economy (full runs, two rounds of tuning `config.js`). Kill
+> condition, from the prototype brief and marked there as guessed: leaving
+> still never feels like a hard choice after two tuning rounds. If it fails,
+> the designer decides what happens next; the valley-first order is not changed
+> by this rule (`design/gdd/game-concept.md`, Design Risks).
 >
 > Other options the producer gave, not taken: one lean MVP of about 15 systems
 > (8 to 11 months, nothing playable until the end); running the MVP at
@@ -397,7 +402,7 @@ None remaining. Two near-cycles were found and removed:
 | Save & Load, with ADR-0003 | Technical | Saving hundreds of built pieces, the storm clock and storms during a run; a background save writer and a 1 ms snapshot budget that is not yet measured | ADR-0003 (Accepted) covers the design; measure the snapshot with a generated 2,000-piece home early in Milestone A |
 | Storms | Design | Storms can destroy what the player built and take an unsheltered stash; they run during runs. If they feel unfair or like a chore, they break the rewritten anti-pillars | Always forecast, with strength shown; one repair action fixes the whole home; stronger tiers from run materials need little or no repair; test the 50 to 70 minute cycle and the two-storm rule early in Milestone A |
 | Session & Authority | Technical | A networked host on a post-cutoff engine version, on the developer's first 3D game; every mechanic pays its cost | ADR-0001's fallback (in-process host behind `ISessionHost`); reassess after the first mechanic is built end to end |
-| The asteroid run's tension | Design | The unproven half of the core hypothesis ("No, not really" after a few minutes of play). With the valley built first it is not tested in Unity until Milestone B | Test it now in the browser prototype: full runs, then tune `config.js` (`prototypes/star-haul/REPORT.md`) |
+| The asteroid run's tension | Design | The unproven half of the core hypothesis ("No, not really" after a few minutes of play). With the valley built first it is not tested in Unity until Milestone B | Retest it in the browser prototype before the first `/design-system` run (gate in the Producer Note above): full runs, two rounds of tuning `config.js` (`prototypes/star-haul/REPORT.md`) |
 | Creature AI and Perception | Scope | The largest share of Milestone B; the producer's earlier likely cut point was "halfway through the AI work" | Design one creature fully before the second |
 | Ore & Item Economy | Design | Read by Pack, Tools & Gear, Gathering, Building, Stash, Crafting and Mining. Open question from the art bible: is teal worth the same as amber per tier? | Start from the prototype's `config.js` values; `/balance-check` before stories |
 | Home Valley and Asteroid World | Scope | Two hand-made maps on a first 3D game | Grey-box both; the asteroid can be cut to the landing area plus one zone |
@@ -422,6 +427,7 @@ None remaining. Two near-cycles were found and removed:
 
 - [x] Review and approve this systems enumeration (designer, 2026-11-27)
 - [x] Write the home and storm persistence ADR (`/architecture-decision`): ADR-0003, Accepted 2026-11-27
+- [ ] Retest the run's tension in the browser prototype (two tuning rounds; kill condition in the Producer Note) before the first `/design-system` run
 - [ ] Design MVP-tier systems first (use `/design-system [system-name]`), starting with Game Data & Tuning
 - [ ] Run `/design-review` on each completed GDD
 - [ ] Run `/gate-check technical-setup` when MVP systems are designed

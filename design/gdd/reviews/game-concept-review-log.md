@@ -105,3 +105,40 @@ Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 
 Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
 Reviewed-Content-Hash: production/gate-checks/2026-11-26-concept-to-systems-design.md 19a1d23caf1509c2b2548aadeb8366b0f0cd0bcf
 Reviewed-Content-Hash: prototypes/star-haul/brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
+
+## Review — 2026-11-27 — Verdict: APPROVED
+Review mode: full · Workflow: full
+Scope signal: XL (full vision; producer should verify)
+Specialists: game-designer, systems-designer, economy-designer, producer; senior: creative-director
+Blocking items: 0 | Recommended: 4 to fix before `/gate-check`, plus open items for their owning design docs
+Summary: Fourth review, in a fresh session. All three blockers from the third review are fixed in the text (rocks and sticks always come back, owner Home Valley; retest before Milestone A with the brief's guessed kill condition, outcome left to the designer; Tier 1a relabelled). Three specialists proposed new blockers; the creative-director ruled each recommended, because each was a known recommended item, a cross-document sync, or a guarantee the MVP's own numbers already satisfy, with an obvious owning design doc. Checked against the concept template; registry empty, values checked by hand against ADR-0003, the brief, REPORT.md and the systems index.
+Prior verdict resolved: Yes (all 3 blocking items)
+Findings:
+- [RECOMMENDED, fix before gate] Design Risks / Next Steps: define "before Milestone A begins" as before the first `/design-system` run, and before any design doc for Oxygen, Hunter Escalation, Mining or Ore & Item Economy
+- [RECOMMENDED, fix before gate] systems-index.md: carry the retest gate and kill condition (Producer Note, tension risk row, Next Steps); ADR-0003 still listed as unwritten (fixed separately in 157f91b)
+- [RECOMMENDED, fix before gate] Flow / Open Questions: "equipped gear" undefined in the MVP (one drill; death may cost only the pack)
+- [RECOMMENDED, fix before gate] Scope Tiers: say whether the MVP finish line includes systems 25 to 28 and that the 14 to 20 month estimate leaves them out
+- [RECOMMENDED] Open Questions (Storms, Run Flow, Oxygen): "a run of normal length cannot destroy a home ready at launch" needs owners; "ready" = every piece at full condition, stash under a roof; runs end before the shortest storm interval; planet runs (30 to 45+) need a cap or an exemption (Tier 3)
+- [RECOMMENDED] Economy (Ore & Item Economy): one free drill means death costs only the pack; two drill tiers vs one; the retest records whether losing only the pack stings
+- [RECOMMENDED] Open Questions (Storms): no storm strength removes a full-condition rock-and-stick piece in fewer than 2 storms
+- [RECOMMENDED] Flow (Crafting, Home Valley): one rebuild-time acceptance test owned by Crafting with Home Valley's regrowth rate as input; "build, roof and once repair" from a flattened home; list "everything a run needs to launch" and include a roofed stash
+- [RECOMMENDED] Economy: repair cost (if only rocks and sticks, storms cost only time); partial vs blocked repair of a mixed home short of ore
+- [RECOMMENDED] Economy / Pillar 5: nothing in the MVP shows wealth (no money, stash contents hidden, brief score is a number)
+- [RECOMMENDED] Run Flow: dying with an empty pack is nearly free (scouting, skipping the walk back)
+- [RECOMMENDED] Elevator Pitch: "stays there" implies body recovery; the rules say lost
+- [RECOMMENDED] Scope Tiers: Tier 1a lists crafting and stash, already in the MVP
+- [RECOMMENDED] ADR-0003 L132 and systems index: record that rocks and sticks come back (rate and saved gather points left to Home Valley); Crafting depends on Gathering and Home Valley
+- [RECOMMENDED] Design Risks: define a tuning "round" (minimum run count) and where the retest result is logged (REPORT.md)
+- [RECOMMENDED] Next Steps / Director Review Record: `/gate-check` and `/estimate` steps; CD-PILLARS and first PR-SCOPE "not re-run"; index vs concept tier mapping
+
+Creative-director rulings on specialist disagreements: game-designer (0 blocking) upheld over systems-designer (normal-length run guarantee: MVP numbers already satisfy it, planet case is Tier 3), economy-designer (one drill: concept is consistent, retest answers whether the pack alone stings), producer B1 (index sync is housekeeping; concept gates correctly) and B2 (sizing, not design). Dropped: run length vs the prototype's 540 s oxygen tank (retest covers it); "one tuning round vs two"; onboarding-time item (duplicates review 3).
+
+Edits after this review (designer approved, 2026-11-27): the four pre-gate items were applied, (c) as "the pack, the drill and any other carried gear; in the MVP, only the hammer if it was taken on the run; suits and other gear arrive with Tier 1a", and "Check this concept is complete" ticked. These edits were not reviewed. The receipt below stamps the concept and systems index as reviewed, so a later `/design-review` sees both as changed and runs in full.
+Reviewed-Content-Hash: design/gdd/game-concept.md b90d811d9a7b0cb3d20cb21b58c589c324030418
+Reviewed-Content-Hash: design/registry/entities.yaml dfeacb02917f751cb1dfd88cf490c7ec3d8d2d0f
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/systems-index.md 428035db4e6d01a929dbc5446096e42d1a97d279
+Reviewed-Content-Hash: design/game-brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+Reviewed-Content-Hash: prototypes/star-haul/REPORT.md 112bd86e49c8a1cfe4ec8de7b41fc285b30de5c3
+Reviewed-Content-Hash: prototypes/star-haul/brief.md 3ded7adb7a1f925fc10ece4a62db19cab7cdf937
