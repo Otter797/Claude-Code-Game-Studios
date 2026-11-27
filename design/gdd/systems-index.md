@@ -2,57 +2,54 @@
 
 > **Status**: Draft
 > **Created**: 2026-11-26
-> **Last Updated**: 2026-11-26
+> **Last Updated**: 2026-11-27 (reworked for the designer's pivot: the home is a buildable valley, built first)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
 
 ## Overview
 
-Star Haul's first game is one loop: drill ore into a limited pack on an asteroid
-while oxygen drains and the rock wakes up, get back to the ship, then unpack at
-home and craft a better drill. Its systems fall into four groups.
+Star Haul's first game has two halves that feed each other: a home the player
+builds and defends, and runs out to an asteroid for what the home cannot provide.
+The designer chose to build the home first.
 
 **The ground everything stands on.** *Game Data & Tuning* holds every number and
-every ore, tool and recipe definition as data. *Session & Authority* is the
+every item, piece and recipe definition as data. *Session & Authority* is the
 one-player host that every state change passes through (ADR-0001). *Input* maps
-keys to actions. *Save & Load* is the versioned save (ADR-0002).
+keys to actions. *Save & Load* is the versioned save (ADR-0002), which must now
+also hold everything the player has built.
 
-**The run.** *Asteroid World* is the hand-made map: a safe landing area and three
-zones of rising richness and danger. *Player Controller* moves the player through
-it; *Mining* turns a seam into ore; *Pack* limits what can be carried and shows
-its worth; *Tools & Gear* decides what rock can be cut. Pressure comes from
-*Oxygen*, *Health & Damage*, *Creature AI* (the Burrower and the Spitter) and
-*Hunter Escalation*, the hazard that worsens the longer the player stays.
-*Perception* owns noise and sight, so danger can be scouted (Pillar 2). *Run
-Flow* is the coordinator: it starts a run, keeps the clock, and ends it by
-extraction or death, which is where "whatever you carry is lost" is enforced
-(Pillar 3).
+**The valley home (Milestone A).** *Home Valley* is the place: a small valley on
+a planet, with its terrain, its buildable ground, and the only things found
+there, rocks and sticks. *Gathering* picks those up into the *Pack*. *Building*
+lets the player snap together foundations, walls, floors, ceilings, roofs,
+stairs, workbenches and furniture; it tracks each piece's condition, repairs it
+with the hammer from *Tools & Gear*, and answers the question the rest of the
+home depends on: is this under a roof? *Stash* is a storage piece the player
+places. *Crafting* happens at workbenches the player builds. *Storms* arrive
+every 50 to 70 minutes of play, always forecast: a rock-and-stick shelter falls
+after two storms if it is not repaired, and a stash or furniture that is not
+under a roof loses out (Pillar 2: the danger is readable; Pillar 5: the home is
+the scoreboard, and now it can be lost). One repair action with the hammer
+fixes the whole home. Materials brought back from runs build stronger pieces
+that need little or no repair, which is how the haul pays into the home. *Ore & Item Economy* defines the
+materials and what an item container is. *Home HUD & Panels* shows the build
+menu, the forecast, and the stash and crafting panels.
 
-**The reason to go back out.** *Ore & Item Economy* sets what each tier is worth
-and how rich each zone is; it is what makes "one more seam" a real decision
-(Pillar 1). *Stash* keeps what was brought home, and keeps the best-haul and
-stash-total records the brief asks for; *Crafting* turns the stash into the
-better drill.
+**The asteroid run (Milestone B).** *Asteroid World* is the hand-made map.
+*Mining* turns a seam into ore; *Oxygen*, *Health & Damage*, *Creature AI* and
+*Hunter Escalation* supply the pressure; *Perception* owns noise and sight;
+*Run Flow* starts a run, keeps its clock and ends it by extraction or death,
+which is where "whatever you carry is lost" is enforced (Pillar 3). The storm
+clock keeps running during a run and the *Run HUD* warns when one is on the way,
+so "one more seam" (Pillar 1) competes with getting home to repair the roof.
 
-**What the player sees and hears.** *Run HUD* carries the worth and the oxygen.
-*Home Room* is the home as a place, not a menu: a walk-in room with the bench and
-the stash shelves in it, where unpacking plays out with the total counting up and
-stored ore is visible on the shelves; panels appear only when something is used
-(Pillar 5; art bible Section 7). Building the home is a later system (Home
-Building & Farming). *Visual Feedback & Lighting* and *Audio* deliver the polish
-of the art bible's promises: the glowing pack, magenta danger, sound as a
-warning. Their minimum, the part without which danger cannot be read, is in the
-MVP (see the Creative Director Note under Priority Tiers).
-
-**How they relate.** Two systems are read by almost everything and are the most
-expensive to get wrong: *Game Data & Tuning* and *Ore & Item Economy*. *Creature
-AI* is built on by Hunters now and by the later Stealth and Melee trades.
-*Run Flow* is the opposite shape: it depends on six systems and nothing in the
-run depends on it except Hunters and the screens, so it is designed late and
-kept to a state machine. *Perception* was split out of Creature AI on the
-technical director's recommendation, which removed the one near-cycle (Mining
-makes the noise that creatures hear).
+**How they relate.** *Building* is the main bottleneck: Stash, Crafting, Storms,
+the home HUD and saving all read its piece model, so it is the most expensive
+system to get wrong. *Game Data & Tuning* and *Ore & Item Economy* are read by
+almost everything. *Run Flow* is the opposite shape, a coordinator that depends
+on many systems and is designed late. Two near-cycles were found and removed by
+contracts (see Circular Dependencies).
 
 Systems marked "(inferred)" are not named in the concept or the brief; the game
 cannot work without them.
@@ -61,7 +58,8 @@ cannot work without them.
 
 ## Systems Enumeration
 
-Numbers are the recommended design order.
+Numbers are the recommended design order. Systems 1 to 15 are Milestone A (the
+valley home); 16 to 24 are Milestone B (the asteroid run).
 
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
@@ -69,33 +67,37 @@ Numbers are the recommended design order.
 | 2 | Session & Authority | Core | MVP | Not Started | — | — |
 | 3 | Input (inferred) | Core | MVP | Not Started | — | — |
 | 4 | Ore & Item Economy (inferred) | Economy | MVP | Not Started | — | Game Data & Tuning |
-| 5 | Asteroid World | Gameplay | MVP | Not Started | — | Game Data & Tuning |
+| 5 | Home Valley | Gameplay | MVP | Not Started | — | Game Data & Tuning |
 | 6 | Player Controller (inferred) | Gameplay | MVP | Not Started | — | Session & Authority, Game Data & Tuning, Input |
-| 7 | Health & Damage (inferred) | Gameplay | MVP | Not Started | — | Session & Authority, Game Data & Tuning |
-| 8 | Perception (inferred) | Gameplay | MVP | Not Started | — | Game Data & Tuning, Asteroid World |
-| 9 | Save & Load | Persistence | MVP | Not Started | — | Session & Authority, Game Data & Tuning |
-| 10 | Pack | Gameplay | MVP | Not Started | — | Session & Authority, Ore & Item Economy |
-| 11 | Tools & Gear | Progression | MVP | Not Started | — | Game Data & Tuning, Ore & Item Economy |
-| 12 | Oxygen | Gameplay | MVP | Not Started | — | Player Controller, Health & Damage |
-| 13 | Creature AI | Gameplay | MVP | Not Started | — | Player Controller, Health & Damage, Asteroid World, Perception |
-| 14 | Mining | Gameplay | MVP | Not Started | — | Player Controller, Pack, Tools & Gear, Asteroid World, Ore & Item Economy, Perception |
-| 15 | Stash | Economy | MVP | Not Started | — | Save & Load, Pack, Ore & Item Economy |
-| 16 | Crafting | Progression | MVP | Not Started | — | Stash, Tools & Gear, Ore & Item Economy |
-| 17 | Run Flow | Core | MVP | Not Started | — | Save & Load, Health & Damage, Asteroid World, Pack, Tools & Gear, Stash |
-| 18 | Hunter Escalation | Gameplay | MVP | Not Started | — | Creature AI, Run Flow |
-| 19 | Run HUD | UI | MVP | Not Started | — | Pack, Oxygen, Mining, Health & Damage, Run Flow |
-| 20 | Home Room (inferred) | UI | MVP | Not Started | — | Stash, Crafting, Run Flow |
-| 21 | Visual Feedback & Lighting (inferred) | UI | Vertical Slice | Not Started | — | Pack, Creature AI, Hunter Escalation, Asteroid World, Run Flow |
-| 22 | Audio | Audio | Vertical Slice | Not Started | — | Mining, Creature AI, Oxygen, Perception, Hunter Escalation, Run Flow |
-| 23 | Menus & Settings (inferred) | UI | Vertical Slice | Not Started | — | Input, Save & Load |
-| 24 | First-Run Guidance (inferred) | Meta | Vertical Slice | Not Started | — | Run Flow, Mining, Run HUD, Oxygen |
-| 25 | Accessibility & Options (inferred) | Meta | Alpha | Not Started | — | Run HUD, Home Room, Menus & Settings, Input |
-| 26 | Ship & Destination Map | Progression | Alpha | Not Started | — | Run Flow, Tools & Gear |
-| 27 | Home Building & Farming | Progression | Alpha | Not Started | — | Stash, Crafting, Save & Load |
-| 28 | Co-op Sessions | Core | Full Vision | Not Started | — | Session & Authority, Save & Load |
-| 29 | Stealth & Guard AI | Gameplay | Full Vision | Not Started | — | Perception, Creature AI, Run Flow |
-| 30 | Melee Combat & Bosses | Gameplay | Full Vision | Not Started | — | Health & Damage, Creature AI, Tools & Gear |
-| 31 | Market & Trading | Economy | Full Vision | Not Started | — | Ore & Item Economy, Stash |
+| 7 | Save & Load | Persistence | MVP | Not Started | — | Session & Authority, Game Data & Tuning |
+| 8 | Pack | Gameplay | MVP | Not Started | — | Session & Authority, Ore & Item Economy |
+| 9 | Tools & Gear | Progression | MVP | Not Started | — | Game Data & Tuning, Ore & Item Economy |
+| 10 | Gathering | Gameplay | MVP | Not Started | — | Player Controller, Home Valley, Pack, Ore & Item Economy |
+| 11 | Building | Progression | MVP | Not Started | — | Player Controller, Home Valley, Tools & Gear, Ore & Item Economy, Save & Load |
+| 12 | Stash | Economy | MVP | Not Started | — | Building, Save & Load, Pack, Ore & Item Economy |
+| 13 | Crafting | Progression | MVP | Not Started | — | Building, Stash, Tools & Gear, Ore & Item Economy |
+| 14 | Storms | Gameplay | MVP | Not Started | — | Building, Stash, Home Valley, Save & Load, Run Flow |
+| 15 | Home HUD & Panels (inferred) | UI | MVP | Not Started | — | Building, Storms, Stash, Crafting, Gathering, Run Flow |
+| 16 | Asteroid World | Gameplay | MVP | Not Started | — | Game Data & Tuning |
+| 17 | Health & Damage (inferred) | Gameplay | MVP | Not Started | — | Session & Authority, Game Data & Tuning |
+| 18 | Perception (inferred) | Gameplay | MVP | Not Started | — | Game Data & Tuning, Asteroid World |
+| 19 | Oxygen | Gameplay | MVP | Not Started | — | Player Controller, Health & Damage |
+| 20 | Creature AI | Gameplay | MVP | Not Started | — | Player Controller, Health & Damage, Asteroid World, Perception |
+| 21 | Mining | Gameplay | MVP | Not Started | — | Player Controller, Pack, Tools & Gear, Asteroid World, Ore & Item Economy, Perception |
+| 22 | Run Flow | Core | MVP | Not Started | — | Save & Load, Health & Damage, Asteroid World, Pack, Tools & Gear, Stash |
+| 23 | Hunter Escalation | Gameplay | MVP | Not Started | — | Creature AI, Run Flow |
+| 24 | Run HUD | UI | MVP | Not Started | — | Pack, Oxygen, Mining, Health & Damage, Run Flow, Storms |
+| 25 | Visual Feedback & Lighting (inferred) | UI | Vertical Slice | Not Started | — | Pack, Creature AI, Hunter Escalation, Asteroid World, Home Valley, Storms, Run Flow |
+| 26 | Audio | Audio | Vertical Slice | Not Started | — | Mining, Creature AI, Oxygen, Perception, Hunter Escalation, Storms, Run Flow |
+| 27 | Menus & Settings (inferred) | UI | Vertical Slice | Not Started | — | Input, Save & Load |
+| 28 | First-Run Guidance (inferred) | Meta | Vertical Slice | Not Started | — | Gathering, Building, Storms, Run Flow, Mining, Run HUD, Oxygen |
+| 29 | Accessibility & Options (inferred) | Meta | Alpha | Not Started | — | Run HUD, Home HUD & Panels, Menus & Settings, Input |
+| 30 | Ship & Destination Map | Progression | Alpha | Not Started | — | Run Flow, Tools & Gear |
+| 31 | Farming | Progression | Alpha | Not Started | — | Building, Stash, Save & Load |
+| 32 | Co-op Sessions | Core | Full Vision | Not Started | — | Session & Authority, Save & Load |
+| 33 | Stealth & Guard AI | Gameplay | Full Vision | Not Started | — | Perception, Creature AI, Run Flow |
+| 34 | Melee Combat & Bosses | Gameplay | Full Vision | Not Started | — | Health & Damage, Creature AI, Tools & Gear |
+| 35 | Market & Trading | Economy | Full Vision | Not Started | — | Ore & Item Economy, Stash |
 
 ---
 
@@ -125,46 +127,86 @@ Narrative is not used: the concept has no story campaign (anti-pillar).
 | **Alpha** | All features present in rough form. Complete mechanical scope, placeholder content OK. | Alpha milestone | Design THIRD |
 | **Full Vision** | Polish, edge cases, nice-to-haves, and content-complete features. | Beta / Release | Design as needed |
 
-> **Producer Note (PR-SCOPE, 2026-11-26): UNREALISTIC** against the concept's
-> "2 to 4 months" for the MVP. The producer sized the 20-system MVP at
-> **9 to 12 months** for one hobby developer on a first 3D game at `rigor: full`
-> with ADR-0001 and ADR-0002, and rated its own confidence Low (no track record
-> to calibrate against). **Designer's decision: keep all 20 systems and restate
-> the MVP at 9 to 12 months.** Fallback if the build stalls, as the producer
-> proposed: merge Input with Player Controller, Ore with Pack and Stash, Mining
-> with Tools; grey-box one zone; and move Perception, Creature AI, Hunter
-> Escalation and zones two and three to the next tier (about 11 systems, 4 to 6
-> months). The producer's stated likely cut point is "halfway through the AI
-> work". Later-tier timelines cannot be checked until MVP velocity is known.
+**The MVP is built as two playable milestones** (designer's decision,
+2026-11-27):
 
-> **Creative Director Note** (MVP; CD-SYSTEMS 2026-11-26: CONCERNS, revised):
-> minimum danger feedback is part of the MVP. The loop cannot be judged if
-> danger cannot be read (Pillar 2); a failed test would blame the loop for
-> missing feedback. These are acceptance conditions on existing MVP design docs,
-> not a new system:
+- **Milestone A, the valley home** (systems 1 to 15): gather rocks and sticks,
+  build, set up workbenches, craft a hammer and a basic drill, and keep the home
+  standing through storms.
+- **Milestone B, the asteroid run** (systems 16 to 24): the mining run, with the
+  storm clock still running at home.
+
+> **Producer Note (PR-SCOPE, 2026-11-27): UNREALISTIC.** The producer sized the
+> 24-system MVP as one milestone at **14 to 20 months** solo, low confidence (no
+> velocity data, a first 3D game, the persistence ADR unwritten, the tension
+> half of the hypothesis unproven). Its recommendation was to split the MVP with
+> the **asteroid run first** (10 to 15 months in total), because "the valley
+> home should not be built on top of an unproven run". **The designer chose to
+> split it with the valley home first. That order was not sized by the
+> producer.** Its nearest figure, 5 to 8 months for the valley half, assumed the
+> foundation systems were already built; valley-first also carries them.
+>
+> **Risk accepted by the designer:** the run's tension, the unproven half of the
+> core hypothesis, is not tested in Unity until Milestone B. It can still be
+> tested cheaply now in the browser prototype (full runs, then tuning
+> `config.js`); see `prototypes/star-haul/REPORT.md`.
+>
+> Other options the producer gave, not taken: one lean MVP of about 15 systems
+> (8 to 11 months, nothing playable until the end); running the MVP at
+> `workflow: standard` to save 1 to 2 months of documents (the designer kept
+> `full`).
+
+> **Creative Director Note** (MVP; CD-SYSTEMS 2026-11-26, on the previous
+> version of this index): minimum danger feedback is part of the MVP. The loop
+> cannot be judged if danger cannot be read (Pillar 2). These are acceptance
+> conditions on existing design docs, not a new system:
 > - **Pack**: the pack glows brighter as it fills.
 > - **Creature AI**: creatures carry the magenta tell; a sound plays when a
 >   creature notices the player.
 > - **Hunter Escalation**: a warning sound when a hunter tier rises.
 > - **Oxygen**: the gauge turns magenta and a warning sound plays when low.
 > - **Run HUD**: a cue when the pack is full.
->
-> Polish of all of these stays in Visual Feedback & Lighting and Audio (Vertical
-> Slice). If the producer's lean fallback is used, this feedback slice is kept.
->
-> **Creative Director Note** (MVP): system 20 was renamed from Home Screens to
-> Home Room. Pillar 5's own test picks "a workshop you build and stand in" over a
-> menu; if the MVP home is menus, the second half of the core hypothesis is not
-> tested. This adds level and art work to an MVP the producer already sized as
-> unrealistic against the original timeline.
+> - **Storms** (added with the pivot): the forecast and the on-the-way
+>   notification are readable at home and during a run.
 >
 > **Creative Director Note** (anti-pillars, to be stated in the design docs):
-> Run Flow's clock runs only during a run, and nothing makes the player wait
-> between runs. Home Building & Farming (Alpha): crops never die and nothing
-> comes due.
+> nothing at home decays by itself and nothing comes due; storms are the one
+> threat, always forecast. No timers force a run. Farming (Alpha): crops never
+> die.
 >
-> Not assessed by the creative director: whether the art bible's specific
-> promises are spread correctly across systems (it did not read the art bible).
+> **Creative Director Note** (MVP; CD-SYSTEMS 2026-11-27, on this reworked
+> index: CONCERNS, revised with the designer's decisions below, not re-run).
+> "The system breakdown itself holds up"; the concerns were what Milestone A
+> delivers and how storms are tuned.
+>
+> - **Milestone A is not evidence that the game works.** It is a
+>   gather-build-and-survive game with no runs: no haul, no stake the player
+>   chooses, no way to get rich (Pillar 1 lives entirely in Milestone B). Its
+>   exit criteria must not be read as a test of the core hypothesis.
+> - **The haul must pay into the home (designer: yes).** Rock-and-stick pieces
+>   are the starter tier and fall after 2 unrepaired storms. Pieces made with
+>   materials from runs are stronger and need little or no repair. **Building**
+>   owns the tiers and which materials each needs; **Ore & Item Economy** owns
+>   the materials. This is an MVP requirement, landing in Milestone B when runs
+>   exist; Milestone A's Building design doc must leave room for it.
+> - **Repair must not be a chore (designer: one action repairs the whole
+>   home).** A single repair action with the hammer, at a material cost, fixes
+>   everything damaged. Without this and the stronger tiers, repair every one or
+>   two storms "is busywork upkeep by any reading" and breaks the rewritten
+>   anti-pillar.
+> - **Storm rules (designer: all three), acceptance conditions on Storms, Home
+>   HUD & Panels and Run HUD:** the storm's strength is always shown; the
+>   forecast is visible before the player launches a run; a run of normal length
+>   cannot destroy a home that was ready at launch. Without them a storm during
+>   a run becomes a timer that forces the run to end.
+> - **The stay-home path arrives with Farming (Alpha), not in the first game
+>   (designer's decision).** In the MVP a player who never leaves can keep a
+>   basic home standing but cannot progress. The design docs must not claim
+>   otherwise.
+> - Still open: how strong storms are and whether strength varies.
+>
+> Not assessed by the creative director: Milestone A's schedule (no estimate
+> exists for the valley-first order).
 
 ---
 
@@ -179,71 +221,101 @@ Narrative is not used: the concept has no story campaign (anti-pillar).
 ### Core Layer (depends on foundation)
 
 1. Ore & Item Economy — depends on: Game Data & Tuning
-2. Asteroid World — depends on: Game Data & Tuning
-3. Player Controller — depends on: Session & Authority, Game Data & Tuning, Input
-4. Health & Damage — depends on: Session & Authority, Game Data & Tuning
-5. Perception — depends on: Game Data & Tuning, Asteroid World
-6. Save & Load — depends on: Session & Authority, Game Data & Tuning
+2. Home Valley — depends on: Game Data & Tuning
+3. Asteroid World — depends on: Game Data & Tuning
+4. Player Controller — depends on: Session & Authority, Game Data & Tuning, Input
+5. Health & Damage — depends on: Session & Authority, Game Data & Tuning
+6. Perception — depends on: Game Data & Tuning, Asteroid World
+7. Save & Load — depends on: Session & Authority, Game Data & Tuning
 
 ### Feature Layer (depends on core)
 
 1. Pack — depends on: Session & Authority, Ore & Item Economy
 2. Tools & Gear — depends on: Game Data & Tuning, Ore & Item Economy
-3. Oxygen — depends on: Player Controller, Health & Damage
-4. Creature AI — depends on: Player Controller, Health & Damage, Asteroid World, Perception
-5. Mining — depends on: Player Controller, Pack, Tools & Gear, Asteroid World, Ore & Item Economy, Perception
-6. Stash — depends on: Save & Load, Pack, Ore & Item Economy
-7. Crafting — depends on: Stash, Tools & Gear, Ore & Item Economy
-8. Run Flow — depends on: Save & Load, Health & Damage, Asteroid World, Pack, Tools & Gear, Stash
-9. Hunter Escalation — depends on: Creature AI, Run Flow
+3. Gathering — depends on: Player Controller, Home Valley, Pack, Ore & Item Economy
+4. Building — depends on: Player Controller, Home Valley, Tools & Gear, Ore & Item Economy, Save & Load
+5. Stash — depends on: Building, Save & Load, Pack, Ore & Item Economy
+6. Crafting — depends on: Building, Stash, Tools & Gear, Ore & Item Economy
+7. Oxygen — depends on: Player Controller, Health & Damage
+8. Creature AI — depends on: Player Controller, Health & Damage, Asteroid World, Perception
+9. Mining — depends on: Player Controller, Pack, Tools & Gear, Asteroid World, Ore & Item Economy, Perception
+10. Run Flow — depends on: Save & Load, Health & Damage, Asteroid World, Pack, Tools & Gear, Stash
+11. Storms — depends on: Building, Stash, Home Valley, Save & Load, Run Flow
+12. Hunter Escalation — depends on: Creature AI, Run Flow
 
 ### Presentation Layer (depends on features)
 
-1. Run HUD — depends on: Pack, Oxygen, Mining, Health & Damage, Run Flow
-2. Home Room — depends on: Stash, Crafting, Run Flow
-3. Visual Feedback & Lighting — depends on: Pack, Creature AI, Hunter Escalation, Asteroid World, Run Flow
-4. Audio — depends on: Mining, Creature AI, Oxygen, Perception, Hunter Escalation, Run Flow
+1. Home HUD & Panels — depends on: Building, Storms, Stash, Crafting, Gathering, Run Flow
+2. Run HUD — depends on: Pack, Oxygen, Mining, Health & Damage, Run Flow, Storms
+3. Visual Feedback & Lighting — depends on: Pack, Creature AI, Hunter Escalation, Asteroid World, Home Valley, Storms, Run Flow
+4. Audio — depends on: Mining, Creature AI, Oxygen, Perception, Hunter Escalation, Storms, Run Flow
 5. Menus & Settings — depends on: Input, Save & Load
 
 ### Polish Layer (depends on everything)
 
-1. First-Run Guidance — depends on: Run Flow, Mining, Run HUD, Oxygen
-2. Accessibility & Options — depends on: Run HUD, Home Room, Menus & Settings, Input
+1. First-Run Guidance — depends on: Gathering, Building, Storms, Run Flow, Mining, Run HUD, Oxygen
+2. Accessibility & Options — depends on: Run HUD, Home HUD & Panels, Menus & Settings, Input
 
 ### Later tiers
 
 1. Ship & Destination Map — depends on: Run Flow, Tools & Gear
-2. Home Building & Farming — depends on: Stash, Crafting, Save & Load
-3. Co-op Sessions — depends on: Session & Authority, Save & Load. **Blocked** on a future ADR covering guests' progress and whose stash it is (ADR-0002).
+2. Farming — depends on: Building, Stash, Save & Load
+3. Co-op Sessions — depends on: Session & Authority, Save & Load. **Blocked** on a future ADR covering guests' progress and whose home and stash it is.
 4. Stealth & Guard AI — depends on: Perception, Creature AI, Run Flow
 5. Melee Combat & Bosses — depends on: Health & Damage, Creature AI, Tools & Gear
 6. Market & Trading — depends on: Ore & Item Economy, Stash
 
-### Technical Director Notes (TD-SYSTEM-BOUNDARY, 2026-11-26: CONCERNS)
+**Milestone A note.** Storms and Home HUD & Panels list Run Flow, which is a
+Milestone B system. In Milestone A there are no runs, so their design docs must
+work with no run in progress and state what changes when Run Flow exists.
 
-The director found the structure sound ("None of them needs a restructure").
-Conditions for the design docs:
+### Technical Director Notes (TD-SYSTEM-BOUNDARY)
 
-- **Perception was split out of Creature AI** on its recommendation. Mining and
-  Player Controller send noise events to Perception; Mining does not depend on
-  Creature AI.
-- **Rules never depend on Session & Authority.** Where a system lists it as a
-  dependency, that means its networked (Authority) part only; Simulation code
-  must not reference it (ADR-0001's assembly rule). Game Data & Tuning has the
-  same split: plain config types in the Simulation, asset loading in Authority.
-- **`IWorldQuery` has no single owner.** Each Simulation system defines its own
-  part (`DrillHit` in Mining, `PathDistance` in Creature AI, noise and sight in
-  Perception); Session & Authority provides the implementations.
-- **Run marker.** The begin-run and end-run hooks belong to Run Flow. Save & Load
-  owns only the store and migrations and must never depend on Run Flow.
-- **One death path.** Oxygen has no link to Run Flow, which holds only if Oxygen
-  kills by dealing damage through Health & Damage. The Oxygen design doc must
-  commit to that. Not assessed by the director: the concept says almost nothing
-  about oxygen.
-- **Run Flow stays a state machine**: the clock, the extraction and death
-  transitions, and the marker hooks. Zone layout belongs to Asteroid World;
-  moving the haul into the stash belongs to Stash. Run Flow must never read
-  escalation state.
+**2026-11-27, on the valley-home map: CONCERNS.** "The boundaries hold up and
+nothing needs restructuring"; no cycle found. Conditions:
+
+- **A new ADR on home and storm persistence is required before the Building,
+  Stash, Storms and Save & Load design docs can be finished.** ADR-0002 put the
+  layout of a player-built home out of scope, saves only at safe points, and
+  writes the whole file synchronously, which "will stutter once a home has
+  hundreds of pieces". The ADR must cover: saving built pieces and their
+  condition; building, repairing and gathering as save points; applying storms
+  that passed during a run in one step when the run ends; the crash case.
+- **Designer's decisions for that ADR (2026-11-27):** pieces snap to each other;
+  the storm clock counts only time spent playing, never while the game is
+  closed; an abandoned run (quit or crash) counts the time actually played, so
+  the save must note the time as a run goes; what the player carries at home is
+  kept, so "the pack is never saved" becomes "the pack is not saved during a run".
+- **The roof check is worked out from the piece model, not from physics.** The
+  home scene is not loaded during a run, and a physics check would need a scene
+  in tests. This is why pieces snap.
+- **Home and storm clock live in session-level Simulation state,** never in
+  scene objects; the home is rebuilt from the model when its scene loads. Pieces
+  are sent as data, not as one networked object each.
+- **Building owns its piece list and costs** (data through Game Data & Tuning);
+  Ore & Item Economy owns only the materials and the item-container contract.
+- **Storms only listens for Run Flow's end-of-run event.** Run Flow must never
+  call Storms. Storms decides how much damage; Building only applies it, through
+  a narrow interface.
+- **Building is not split yet.** If its design doc outgrows its size, condition
+  and repair become a separate Structure Integrity system.
+- Not assessed: a performance budget for the number of pieces in a home; none
+  exists.
+
+**2026-11-26, still in force for the run systems:**
+
+- Perception was split out of Creature AI. Mining and Player Controller send
+  noise events to Perception.
+- Rules never depend on Session & Authority; where a system lists it, that means
+  its networked (Authority) part only (ADR-0001's assembly rule). Game Data &
+  Tuning has the same split.
+- `IWorldQuery` has no single owner; each Simulation system defines its own part.
+- The run-marker hooks belong to Run Flow; Save & Load must never depend on Run
+  Flow.
+- One death path: Oxygen kills by dealing damage through Health & Damage. The
+  Oxygen design doc must commit to that.
+- Run Flow stays a state machine. Zone layout belongs to Asteroid World; moving
+  the haul into a stash belongs to Stash.
 
 ---
 
@@ -255,50 +327,63 @@ Conditions for the design docs:
 | 2 | Session & Authority | MVP | Foundation | network-programmer, technical-director | L |
 | 3 | Input | MVP | Foundation | ux-designer, gameplay-programmer | S |
 | 4 | Ore & Item Economy | MVP | Core | economy-designer | M |
-| 5 | Asteroid World | MVP | Core | level-designer, art-director | L |
+| 5 | Home Valley | MVP | Core | level-designer, art-director | L |
 | 6 | Player Controller | MVP | Core | game-designer, gameplay-programmer | M |
-| 7 | Health & Damage | MVP | Core | systems-designer | S |
-| 8 | Perception | MVP | Core | ai-programmer, game-designer | M |
-| 9 | Save & Load | MVP | Core | lead-programmer | L |
-| 10 | Pack | MVP | Feature | game-designer | S |
-| 11 | Tools & Gear | MVP | Feature | systems-designer | S |
-| 12 | Oxygen | MVP | Feature | systems-designer | S |
-| 13 | Creature AI | MVP | Feature | ai-programmer, game-designer | L |
-| 14 | Mining | MVP | Feature | game-designer, gameplay-programmer | M |
-| 15 | Stash | MVP | Feature | economy-designer | S |
-| 16 | Crafting | MVP | Feature | economy-designer, systems-designer | S |
-| 17 | Run Flow | MVP | Feature | game-designer, lead-programmer | M |
-| 18 | Hunter Escalation | MVP | Feature | ai-programmer, systems-designer | M |
-| 19 | Run HUD | MVP | Presentation | ux-designer, ui-programmer | S |
-| 20 | Home Room | MVP | Presentation | ux-designer, level-designer, ui-programmer | L |
-| 21 | Visual Feedback & Lighting | Vertical Slice | Presentation | art-director, technical-artist | M |
-| 22 | Audio | Vertical Slice | Presentation | audio-director, sound-designer | M |
-| 23 | Menus & Settings | Vertical Slice | Presentation | ux-designer, ui-programmer | S |
-| 24 | First-Run Guidance | Vertical Slice | Polish | ux-designer, game-designer | S |
-| 25 | Accessibility & Options | Alpha | Polish | accessibility-specialist | S |
-| 26 | Ship & Destination Map | Alpha | Feature | game-designer | L |
-| 27 | Home Building & Farming | Alpha | Feature | game-designer, systems-designer | L |
-| 28 | Co-op Sessions | Full Vision | Feature | network-programmer | L |
-| 29 | Stealth & Guard AI | Full Vision | Feature | ai-programmer, level-designer | L |
-| 30 | Melee Combat & Bosses | Full Vision | Feature | game-designer, ai-programmer | L |
-| 31 | Market & Trading | Full Vision | Feature | economy-designer | M |
+| 7 | Save & Load | MVP | Core | lead-programmer | L |
+| 8 | Pack | MVP | Feature | game-designer | S |
+| 9 | Tools & Gear | MVP | Feature | systems-designer | S |
+| 10 | Gathering | MVP | Feature | game-designer | S |
+| 11 | Building | MVP | Feature | game-designer, gameplay-programmer, systems-designer | L |
+| 12 | Stash | MVP | Feature | economy-designer | M |
+| 13 | Crafting | MVP | Feature | economy-designer, systems-designer | S |
+| 14 | Storms | MVP | Feature | game-designer, systems-designer | M |
+| 15 | Home HUD & Panels | MVP | Presentation | ux-designer, ui-programmer | M |
+| 16 | Asteroid World | MVP | Core | level-designer, art-director | L |
+| 17 | Health & Damage | MVP | Core | systems-designer | S |
+| 18 | Perception | MVP | Core | ai-programmer, game-designer | M |
+| 19 | Oxygen | MVP | Feature | systems-designer | S |
+| 20 | Creature AI | MVP | Feature | ai-programmer, game-designer | L |
+| 21 | Mining | MVP | Feature | game-designer, gameplay-programmer | M |
+| 22 | Run Flow | MVP | Feature | game-designer, lead-programmer | M |
+| 23 | Hunter Escalation | MVP | Feature | ai-programmer, systems-designer | M |
+| 24 | Run HUD | MVP | Presentation | ux-designer, ui-programmer | S |
+| 25 | Visual Feedback & Lighting | Vertical Slice | Presentation | art-director, technical-artist | M |
+| 26 | Audio | Vertical Slice | Presentation | audio-director, sound-designer | M |
+| 27 | Menus & Settings | Vertical Slice | Presentation | ux-designer, ui-programmer | S |
+| 28 | First-Run Guidance | Vertical Slice | Polish | ux-designer, game-designer | S |
+| 29 | Accessibility & Options | Alpha | Polish | accessibility-specialist | S |
+| 30 | Ship & Destination Map | Alpha | Feature | game-designer | L |
+| 31 | Farming | Alpha | Feature | game-designer, systems-designer | M |
+| 32 | Co-op Sessions | Full Vision | Feature | network-programmer | L |
+| 33 | Stealth & Guard AI | Full Vision | Feature | ai-programmer, level-designer | L |
+| 34 | Melee Combat & Bosses | Full Vision | Feature | game-designer, ai-programmer | L |
+| 35 | Market & Trading | Full Vision | Feature | economy-designer | M |
 
 Effort estimates: S = 1 session, M = 2-3 sessions, L = 4+ sessions. A "session"
 is one focused design conversation producing a complete GDD. These are design
 effort, not build effort; the Producer Note above covers build time.
 
-ADR-0001 and ADR-0002 are already Accepted and cover much of the technical side
-of Session & Authority and Save & Load; their design docs state the player-facing
-rules and tuning, and must not contradict the ADRs.
+**Before design doc 7 (Save & Load):** write the home and storm persistence ADR
+(`/architecture-decision`). Design docs 11, 12 and 14 also wait on it.
+
+ADR-0001 and ADR-0002 are Accepted; design docs must not contradict them.
+ADR-0002 will be amended or superseded in part by the new ADR.
 
 ---
 
 ## Circular Dependencies
 
-- None remaining. One near-cycle was found and removed: Mining makes noise that
-  creatures hear, and creatures threaten the mining player. Perception now owns
-  the noise-event contract (position, loudness); Mining and Player Controller
-  emit to it and Creature AI reads from it, so neither depends on the other.
+None remaining. Two near-cycles were found and removed:
+
+- **Stash and Building.** Building needs materials that may sit in a stash, and
+  a stash is a built piece. Ore & Item Economy owns an "item container"
+  contract; Pack and Stash both implement it. Building takes materials from
+  containers through that contract and never refers to Stash. Stash depends on
+  Building, not the reverse.
+- **Mining and Creature AI.** Mining makes noise that creatures hear, and
+  creatures threaten the mining player. Perception owns the noise-event
+  contract; Mining and Player Controller emit to it and Creature AI reads from
+  it.
 
 ---
 
@@ -306,12 +391,15 @@ rules and tuning, and must not contradict the ADRs.
 
 | System | Risk Type | Risk Description | Mitigation |
 |--------|-----------|-----------------|------------|
+| Building | Technical / Scope | The costliest system and the main bottleneck: snapping, per-piece condition, repair, the roof check, host authority and versioned saves; five systems read its piece model | Design the piece model first; keep damage and repair behind a narrow interface; split out Structure Integrity if the design doc outgrows its size |
+| Save & Load, with the new ADR | Technical | ADR-0002 does not cover built structures, the storm clock or storms during a run; four design docs are blocked until a new ADR exists | Write the ADR before design doc 7 |
+| Storms | Design | Storms can destroy what the player built and take an unsheltered stash; they run during runs. If they feel unfair or like a chore, they break the rewritten anti-pillars | Always forecast, with strength shown; one repair action fixes the whole home; stronger tiers from run materials need little or no repair; test the 50 to 70 minute cycle and the two-storm rule early in Milestone A |
 | Session & Authority | Technical | A networked host on a post-cutoff engine version, on the developer's first 3D game; every mechanic pays its cost | ADR-0001's fallback (in-process host behind `ISessionHost`); reassess after the first mechanic is built end to end |
-| Creature AI and Perception | Scope | The largest share of MVP work; the producer's likely cut point is "halfway through the AI work", which leaves a broken game | Design one creature fully before the second; the producer's lean fallback moves AI to the next tier |
-| Ore & Item Economy | Design | Read by Pack, Tools & Gear, Mining, Stash and Crafting; wrong numbers make "one more seam" a non-decision everywhere. Open question from the art bible: is teal worth the same as amber per tier? | Start from the prototype's `config.js` values; `/balance-check` before stories |
-| Run Flow | Design | Six dependencies; where ADR-0002's "leaving a run is a death" rule lands; risk of absorbing other systems' rules | Design it after its dependencies; keep it a state machine (TD note) |
-| Asteroid World | Scope | One hand-made map with a landing area and three zones is a large content job for a first 3D level; the brief asks for "good quality map design" | Grey-box first; zones two and three are the first cut if time runs short |
-| The MVP as a whole | Scope | 20 systems, sized at 9 to 12 months against a concept estimate of 2 to 4; that sizing predates Home Room becoming a walk-in room and the minimum feedback slice, both of which add work | The Producer Note's fallback; re-estimate once the first three systems are built |
+| The asteroid run's tension | Design | The unproven half of the core hypothesis ("No, not really" after a few minutes of play). With the valley built first it is not tested in Unity until Milestone B | Test it now in the browser prototype: full runs, then tune `config.js` (`prototypes/star-haul/REPORT.md`) |
+| Creature AI and Perception | Scope | The largest share of Milestone B; the producer's earlier likely cut point was "halfway through the AI work" | Design one creature fully before the second |
+| Ore & Item Economy | Design | Read by Pack, Tools & Gear, Gathering, Building, Stash, Crafting and Mining. Open question from the art bible: is teal worth the same as amber per tier? | Start from the prototype's `config.js` values; `/balance-check` before stories |
+| Home Valley and Asteroid World | Scope | Two hand-made maps on a first 3D game | Grey-box both; the asteroid can be cut to the landing area plus one zone |
+| The MVP as a whole | Scope | 24 systems; 14 to 20 months as one milestone per the producer, low confidence; the valley-first split is not sized | Two playable milestones; re-estimate after the first three systems are built; `/scope-check` after any cut |
 
 ---
 
@@ -319,18 +407,19 @@ rules and tuning, and must not contradict the ADRs.
 
 | Metric | Count |
 |--------|-------|
-| Total systems identified | 31 |
+| Total systems identified | 35 |
 | Design docs started | 0 |
 | Design docs reviewed | 0 |
 | Design docs approved | 0 |
-| MVP systems designed | 0/20 |
+| MVP systems designed | 0/24 |
 | Vertical Slice systems designed | 0/4 |
 
 ---
 
 ## Next Steps
 
-- [x] Review and approve this systems enumeration (designer, 2026-11-26)
+- [x] Review and approve this systems enumeration (designer, 2026-11-27)
+- [ ] Write the home and storm persistence ADR (`/architecture-decision`)
 - [ ] Design MVP-tier systems first (use `/design-system [system-name]`), starting with Game Data & Tuning
 - [ ] Run `/design-review` on each completed GDD
 - [ ] Run `/gate-check technical-setup` when MVP systems are designed

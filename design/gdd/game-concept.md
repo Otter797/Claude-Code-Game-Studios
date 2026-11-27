@@ -342,9 +342,8 @@ Civilization.
 - Crew size for co-op. Answer during `/design-system` for co-op, before Tier 2a.
 - What the worsening hazard on an asteroid is. Answer with the MVP prototype.
 - Does death also cost equipped gear, or only the pack? Current rule: everything carried. Test in the MVP.
-- Storms: how often they come and how strong; whether the forecast clock keeps running while the player is away on a run.
-- Can a rock-and-stick shelter survive a storm at all? If not, staying home the whole game stops being possible, which the designer named as a goal.
-- What counts as "sheltered" for the stash.
+- Storms, answered by the designer on 2026-11-27: they come every 50 to 70 minutes of play; the clock keeps running during a run, with a clear notification when one is on the way, and does not run while the game is closed; a rock-and-stick shelter falls after 2 storms if not repaired, and is repaired with a hammer; a stash or furniture counts as sheltered if it is under a roof; building pieces snap to each other; one repair action fixes the whole home; materials from runs build stronger pieces that need little or no repair; a storm's strength is always shown, the forecast is visible before a run is launched, and a run of normal length cannot destroy a home that was ready at launch. Still open: how strong storms are and whether strength varies.
+- The stay-home path ("possible to stay on your home planet... the whole game just crafting and farming") arrives with Farming, after the first game (designer, 2026-11-27). In the first game a player who never leaves can keep a basic home standing but cannot progress.
 - How a stay-home player earns: trading with crews, a market, or both?
 
 ### Director Review Record
