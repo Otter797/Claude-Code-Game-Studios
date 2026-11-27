@@ -72,7 +72,8 @@ state_ownership:
     owner_system: persistence-service
     adr: docs/architecture/adr-0002-persistence.md
     # Old value (before ADR-0003, 2026-11-27): "ISaveStore.Load() / Save(SaveModel), called only by the host's Authority layer; the Simulation exchanges a plain SaveModel and never touches files. Covers stash, gear, recipes, statistics and the run marker."
-    interface: "The host's Authority layer hands immutable SaveModel snapshots to ISaveQueue; only the queue's single writer calls ISaveStore.Load() / Save(SaveModel). The Simulation exchanges a plain SaveModel and never touches files. Covers the home (structures and pieces), containers keyed by piece id, carried items, the storm clock, gear, recipes, statistics and the run marker."
+    # Value from 2026-11-27 until the ADR-0003 amendment the same day: "...Covers the home (structures and pieces), containers keyed by piece id, carried items, the storm clock, gear, recipes, statistics and the run marker."
+    interface: "The host's Authority layer loads through ISaveQueue.LoadAndWait() and hands immutable SaveModel snapshots to ISaveQueue; only the queue's single writer calls ISaveStore.Load() / Save(SaveModel). The Simulation exchanges a plain SaveModel and never touches files. Covers the home (structures and pieces), containers keyed by piece id, carried items (pack, tool, equipped gear; no separate gear field, every item in exactly one place), the storm clock, recipes, statistics and the run marker."
     write_access: host-only
     referenced_by:
       - docs/architecture/adr-0002-persistence.md
@@ -149,11 +150,12 @@ interfaces:
     consumers:
       - persistence-service
     adr: docs/architecture/adr-0003-home-and-storm-persistence.md
-    signal_signature: "ISaveQueue.Request(snapshot) returns at once; RequestAndWait(snapshot) completes with success, failure or timed-out; NotePlayTime(playTimeMs); Drain(). One pending snapshot and one pending note, newest wins within each kind. Only the queue's writer calls ISaveStore."
+    # Before the ADR-0003 amendment (2026-11-27) there was no LoadAndWait.
+    signal_signature: "ISaveQueue.LoadAndWait() at start-up only, with no time-out; Request(snapshot) returns at once; RequestAndWait(snapshot) completes with success, failure or timed-out; NotePlayTime(playTimeMs); Drain(). One pending snapshot and one pending note, newest wins within each kind. Only the queue's writer calls ISaveStore."
     referenced_by:
       - docs/architecture/adr-0003-home-and-storm-persistence.md
     added: 2026-11-27
-    revised: ""
+    revised: 2026-11-27
 
   - contract: storm_damage_delivery
     status: active
@@ -163,11 +165,12 @@ interfaces:
       - building
       - stash
     adr: docs/architecture/adr-0003-home-and-storm-persistence.md
-    signal_signature: "Storms decides the damage and calls Building's IStructureDamage (apply a storm of a given strength), Building's shelter query, and Stash's container-clearing call. Building and Stash never reference Storms; Run Flow never calls Storms."
+    # Before the ADR-0003 amendment (2026-11-27): IStructureDamage returned nothing and the container-clearing call only emptied.
+    signal_signature: "Storms decides the damage and calls Building's IStructureDamage (apply a storm of a given strength; returns the ids of pieces damaged and destroyed, destroyed pieces already out of the model), Building's shelter query, and Stash's container-clearing call (empty, or empty and remove for a destroyed piece). Building and Stash never reference Storms; Run Flow never calls Storms. At run end the Authority layer calls AdvanceTo before the haul is placed."
     referenced_by:
       - docs/architecture/adr-0003-home-and-storm-persistence.md
     added: 2026-11-27
-    revised: ""
+    revised: 2026-11-27
 
 # Example:
 #
@@ -353,7 +356,7 @@ forbidden_patterns:
 
   - pattern: run_state_saved_beyond_play_time
     status: active
-    description: "Run state must never be saved, with one exception: the play-time note, which holds only the profile id and the storm clock. The pack is not saved during a run, a run can never be resumed, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
+    description: "Run state must never be saved, with one exception: the play-time note, which holds only a note format version, the profile id and the storm clock. The pack is not saved during a run, a run can never be resumed, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
     why: "Loss must stick; an abandoned run must still count the time actually played."
     adr: docs/architecture/adr-0003-home-and-storm-persistence.md
     added: 2026-11-27

@@ -294,9 +294,10 @@ nothing needs restructuring"; no cycle found. Conditions:
   are sent as data, not as one networked object each.
 - **Building owns its piece list and costs** (data through Game Data & Tuning);
   Ore & Item Economy owns only the materials and the item-container contract.
-- **Storms only listens for Run Flow's end-of-run event.** Run Flow must never
-  call Storms. Storms decides how much damage; Building only applies it, through
-  a narrow interface.
+- **Run Flow never calls Storms; it only raises the end of the run.** The
+  Authority layer handles that event and calls Storms' `AdvanceTo` before the
+  haul is placed (ADR-0003, amended 2026-11-27). Storms decides how much damage;
+  Building only applies it, through a narrow interface.
 - **Building is not split yet.** If its design doc outgrows its size, condition
   and repair become a separate Structure Integrity system.
 - Not assessed: a performance budget for the number of pieces in a home; none
