@@ -371,7 +371,7 @@ formulas:
       - full_pack_slow
     output_range: [0, 1]
     expression: "(1 - burrower_speed / sprint_speed) / full_pack_slow"
-    notes: "F4. Validation warning outside 0.6 to 0.95; 0.829 with MVP values (13.3 of 16 slots). Ties Pack, Player Controller and Creature AI."
+    notes: "F4. Validation warning outside 0.5 to 0.95; 0.581 with MVP values (9.3 of 16 slots). Ties Pack, Player Controller and Creature AI. Pack F5 adds escape times (7.7 s caught, 5.6 s gain)."
     added: 2026-11-28
     revised: ""
 
@@ -424,11 +424,11 @@ constants:
     referenced_by:
       - design/gdd/pack.md
       - design/gdd/player-controller.md
-    value: 0.35
+    value: 0.5  # was 0.35 (prototype); raised by design/gdd/pack.md F5 to meet Player Controller's escape targets
     unit: share
-    notes: "tuning.pack; range 0 to 0.6; applied by Player Controller F1 with fill = filled slots / pack_slots (Pack F1, F2)"
+    notes: "tuning.pack; range 0 to 0.6; applied on a run only by Player Controller, with fill = filled slots / pack_slots (Pack F1, F2)"
     added: 2026-11-28
-    revised: ""
+    revised: "2026-11-28"
   - name: note_interval_s
     status: active
     source: design/gdd/save-and-load.md

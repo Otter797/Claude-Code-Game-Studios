@@ -5,13 +5,13 @@
 > **Last Updated**: 2026-11-28
 > **Last Verified**: 2026-11-28
 > **Implements Pillar**: Pillar 1 (The haul is the heartbeat), Pillar 3 (Bright world, real stakes)
-> **Creative Director Review (CD-GDD-ALIGN)**: APPROVED 2026-11-28 — run in-session as a checklist (no agent spawned). Pillar 1 is served by rules: 16 one-ore slots (R1), fill slows the player (R6, F2, with the F4 crossover check), worth is the largest number and the glow is on the player's back (R7, R8). Pillar 3 by the death sink emptying the whole pack (R3, States) with nothing softening it. Pillar 2 by worth and at risk always shown on a run (R8). No drop at home (R5) avoids a hidden loss. No anti-pillar crossed; Pillars 4 and 5 are not served directly and need not be.
+> **Creative Director Review (CD-GDD-ALIGN)**: APPROVED 2026-11-28 — run in-session as a checklist (no agent spawned). Pillar 1 is served by rules: 16 one-ore slots (R1), fill slows the player (R6, F2, with the F4 crossover check), worth is the largest number and the glow is on the player's back (R7, R8). Pillar 3 by the death sink emptying the whole pack (R3, States) with nothing softening it. Pillar 2 by worth and at risk always shown on a run (R8). No drop at home (R5) avoids a hidden loss. No anti-pillar crossed; Pillars 4 and 5 are not served directly and need not be. Re-checked after the 2026-11-28 revision (slow raised to 0.5, run only, F5 escape times): Pillars 1 and 3 are served more strongly, the home payoff no longer drags; APPROVED stands, with the harsher crossover named in Open Question 7.
 
 ## Summary
 
 The Pack is the player's 16-slot carried container: ore goes in as it is mined,
 rocks and sticks as they are gathered, and everything in it is lost on death.
-It glows amber as ore fills it, slows the player by up to 35% as it fills, and
+It glows amber as ore fills it, slows the player on a run by up to 50% as it fills, and
 shows its worth as the largest number on screen. The player picks up loose
 items with Interact and drops them on a run with G or a right-click; at home
 it empties only into a stash or by spending.
@@ -194,10 +194,14 @@ lost with the world (Economy, R10: not a sink).
 
 **R6. Fill and weight.** The pack's **fill** is the share of its slots that
 hold anything (F1), from 0 to 1. Player Controller reads it with
-`full_pack_slow` (both owned here) and slows the player by up to 35% (F2;
+`full_pack_slow` (both owned here) and slows the player by up to 50% (F2;
 Player Controller, F1). Fill counts slots, not units: 20 sticks in one slot
-weigh as one ore. The slow applies at home and on a run alike (Player
-Controller, R5; its Open Question 8 asks whether it should at home).
+weigh as one ore. **The slow applies on a run only**, not at home, so carrying
+a haul to the stash never drags (requested by the Player Controller revision,
+which resolved its Open Question 8 that way; revised 2026-11-28). Pack offers
+Player Controller one read-only, injected interface, the *pack load*: `Fill`
+(0 to 1, F1) and `FullPackSlow`; Player Controller decides from the session
+state when the slow applies.
 
 **R7. Glow.** The pack glows Haul Amber on the player's back (seen by
 teammates, later) and its HUD box brightens, in proportion to the share of
@@ -307,13 +311,13 @@ The `pack_speed_factor` formula is defined as:
 | fill | float, share | 0 to 1 | calculated (F1) | How full the pack is |
 | factor | float | 0.4 to 1 | calculated | Multiplier on walk and sprint speed (Player Controller, F1) |
 
-**Output Range:** 1 (empty) to 0.65 (full, MVP value); never below 0.4 at the
+**Output Range:** 1 (empty) to 0.5 (full, MVP value); never below 0.4 at the
 range limits, so a full pack never stops the player.
 **Boundaries:** `full_pack_slow` = 0 makes the pack weightless (allowed for a
 playtest; it removes the escape crossover, F4). At 0.6 a full pack moves at
 40% speed.
-**Example:** fill 0.8125: 1 − 0.35 × 0.8125 = **0.716**; sprint 6.2 × 0.716 =
-4.44 m/s.
+**Example:** fill 0.8125: 1 − 0.5 × 0.8125 = **0.594**; sprint 6.2 × 0.594 =
+3.68 m/s. At home the factor is not applied (R6).
 
 ### F3. Glow
 
@@ -349,17 +353,46 @@ The `escape_crossover_fill` formula is defined as:
 | full_pack_slow | float, share | 0 to 0.6 | data file | This doc's slow |
 | f* | float, share | any; meaningful 0 to 1 | calculated | Fill at which a sprinting player can no longer outrun a burrower |
 
-**Output Range:** 0.83 with MVP values (13.3 of 16 slots). A validation warning
-(not a refusal) is raised if `f*` falls outside 0.6 to 0.95: below 0.6 the
+**Output Range:** 0.58 with MVP values (9.3 of 16 slots). A validation warning
+(not a refusal) is raised if `f*` falls outside 0.5 to 0.95: below 0.5 the
 player is caught with a half-full pack; above 0.95 (or with `full_pack_slow`
 = 0, where `f*` is undefined and treated as infinite) a full pack still
 escapes and the pack's weight stops mattering for safety.
 **Boundaries:** `burrower_speed ≥ sprint_speed` gives `f*` ≤ 0: even an empty
 pack is caught; warned. `full_pack_slow` = 0 divides by zero: reported as "no
 crossover".
-**Example:** (1 − 4.4 / 6.2) / 0.35 = 0.2903 / 0.35 = **0.829**: with 13 slots
-full the player still escapes (4.44 m/s); with 14 (fill 0.875, 4.30 m/s) they
+**Example:** (1 − 4.4 / 6.2) / 0.5 = 0.2903 / 0.5 = **0.581**: with 9 slots
+full the player still just escapes (4.46 m/s); with 10 (fill 0.625, 4.26 m/s) they
 do not.
+
+### F5. Escape times (design check)
+
+The `escape_times` formula is defined as:
+
+`t_caught = d / (burrower_speed − sprint_speed × (1 − full_pack_slow))` with a full pack, and
+`t_gain = d / (sprint_speed − burrower_speed)` with an empty pack
+
+**Variables:**
+| Variable | Type | Range | Source | Description |
+|----------|------|-------|--------|-------------|
+| d | float, `m` | 10 | constant (Player Controller's escape target distance) | Starting gap to the burrower |
+| burrower_speed | float, m/s | 1 to 10 | data file (Creature AI) | Chaser speed |
+| sprint_speed | float, m/s | 3 to 12 | data file (Player Controller) | Empty-pack sprint |
+| full_pack_slow | float, share | 0 to 0.6 | data file | This doc's slow |
+| t_caught | float, `s` | 0 and up; infinite if a full pack is not slower than the burrower | calculated | Time for a burrower to close 10 m on a sprinting full-pack player |
+| t_gain | float, `s` | 0 and up; infinite if sprint is not faster than the burrower | calculated | Time for an empty-pack sprinter to open 10 m more |
+
+**Output Range:** with MVP values `t_caught` = 10 / (4.4 − 3.1) = **7.7 s**
+and `t_gain` = 10 / 1.8 = **5.6 s**. Player Controller's targets are
+`t_caught` ≤ 8 s and `t_gain` ≤ 6 s; validation warns (does not refuse) when
+either is missed. With the prototype's 0.35, `t_caught` would be 27 s, longer
+than the burrower's `chase_time` (16 s): a full pack would get away, which is
+why the slow was raised.
+**Boundaries:** a denominator of 0 or less means never caught (or never
+gaining): reported as infinite and warned. `full_pack_slow` of at least 0.49
+is needed for `t_caught` ≤ 8 s at MVP speeds.
+**Example:** slow 0.45: full-pack sprint 3.41 m/s, `t_caught` = 10 / 0.99 =
+10.1 s: warned.
 
 ## Edge Cases
 
@@ -395,7 +428,7 @@ found is included.
 
 **Weight and glow**
 
-- **If the pack holds only rocks and sticks**: full weight (fill counts slots),
+- **If the pack holds only rocks and sticks**: full weight on a run (fill counts slots),
   no glow. Accepted: rocks are heavy, not valuable.
 - **If a patch lowers `pack_slots` below the filled count** (an old save):
   overflow slots (Economy, Edge Cases) hold the extra; fill and glow are capped
@@ -457,7 +490,7 @@ found is included.
 
 Bidirectional check: Ore & Item Economy's Interactions list "Pack (8) | Out |
 Each player's pack is a container (16 slots, scale 1)", matching. Game Data &
-Tuning lists `tuning.pack` (pack_slots 16, full_pack_slow 0.35) with Pack as
+Tuning lists `tuning.pack` (pack_slots 16, full_pack_slow 0.35, now 0.5 here: Open Questions, 7) with Pack as
 owner, matching. The systems index lists Pack's Depends On as Session &
 Authority and Ore & Item Economy, matching this doc's hard upstreams; Input and
 Player Controller are not listed (Open Questions, 4).
@@ -469,7 +502,7 @@ Player Controller are not listed (Open Questions, 4).
 | Key | Type | Value | Min | Max | Step | Unit | Apply | Too low | Too high | Rationale |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `pack_slots` | int | 16 | 8 | 40 | 1 | count | restart | Every seam forces a drop; runs end at once | No choice; the 16-slot tension is gone | *Prototype*, retested (Economy, R4) |
-| `full_pack_slow` | float | 0.35 | 0 | 0.6 | 0.05 | share | live | Weight not felt; F4 crossover above 0.95 | Trudging; F4 crossover below 0.6 | *Prototype*, raised from 0.2 in retest round 2 |
+| `full_pack_slow` | float | 0.5 | 0 | 0.6 | 0.05 | share | live | Weight not felt; a full pack outlasts a burrower's chase (at 0.35 it takes 27 s to be caught from 10 m, past `chase_time` 16 s) | Trudging; F4 crossover below 0.5 | Raised from the prototype's 0.35 (itself raised from 0.2 in retest round 2) to meet Player Controller's escape targets (F5); provisional, unplayed in Unity |
 | `pickup_range_m` | float | 2.5 | 1.0 | 5.0 | 0.1 | m | live | Fiddly pick-ups | Picks up through walls of rock | Arm's reach plus a step; below Mining's 3.6 m |
 | `drop_distance_m` | float | 1.0 | 0.5 | 3.0 | 0.1 | m | live | Drops at the feet, hard to see | Drops out of sight | In view, easy to pick up again |
 
@@ -627,14 +660,15 @@ check across a drop and pick-up.
 **Fill, slow and glow (R6, R7, F1, F2, F3)**
 
 12. **GIVEN** 12 ore slots and 1 stick slot, **THEN** fill is 0.8125, the speed
-    factor 0.716 (± 0.001) and glow 0.75. *(Logic)*
-13. **GIVEN** 16 slots of rock, **THEN** fill 1, factor 0.65, glow 0. *(Logic)*
+    factor 0.594 (± 0.001) and glow 0.75. *(Logic)*
+13. **GIVEN** 16 slots of rock, **THEN** fill 1, factor 0.5, glow 0. *(Logic)*
 14. **GIVEN** an empty pack, **THEN** fill 0, factor 1, glow 0. *(Logic)*
 15. **GIVEN** `pack_slots` lowered to 12 under a save with 14 filled slots,
     **THEN** fill and glow are 1, and the 2 extra stacks sit in overflow slots
     untouched. *(Logic)*
 16. **GIVEN** fill 0.8125, **WHEN** the player sprints forward, **THEN** Player
-    Controller's speed is 4.44 m/s ± 0.05. *(Integration with Player
+    Controller's speed is 3.68 m/s ± 0.05 on a run and 6.2 m/s at home.
+    *(Integration with Player
     Controller)*
 
 **Readouts and panel (R8, R9)**
@@ -661,8 +695,8 @@ check across a drop and pick-up.
 
 **Design check and feel (F4)**
 
-22. **GIVEN** sprint 6.2, burrower 4.4, slow 0.35, **WHEN** validation runs,
-    **THEN** F4 reports 0.829 and no warning; **AND GIVEN** slow 0.6, **THEN**
+22. **GIVEN** sprint 6.2, burrower 4.4, slow 0.5, **WHEN** validation runs,
+    **THEN** F4 reports 0.581 and F5 reports 7.7 s and 5.6 s, with no warning; **AND GIVEN** slow 0.6, **THEN**
     0.484 and a warning; **AND GIVEN** slow 0, **THEN** "no crossover" and a
     warning. *(Logic)*
 23. **GIVEN** the default HUD at 1920 × 1080, **WHEN** screenshots are taken with
@@ -683,6 +717,7 @@ check across a drop and pick-up.
 | 4 | The systems index's Depends On for Pack lists Session & Authority and Ore & Item Economy but not Input (Open Pack, Drop Item) or Player Controller (position for range). Add them, or record why not. | `/map-systems` (producer) | Next systems-index update |
 | 5 | Should glow use worth instead of ore-slot count, so a pack of tier-3 ore glows brighter than tier-1? Kept by slot count for readability; the worth number carries tier. | art-director, designer | First playable with runs |
 | 6 | The pop's pitch rising with worth band needs a band definition (Audio). | audio-director | Audio design doc |
+| 7 | `full_pack_slow` is now 0.5 here (F5), but Game Data & Tuning's starting-values table still lists the prototype's 0.35; it should point to this doc's value. 0.5 is unplayed: a crossover at about 9 of 16 slots may feel harsh, so the first Milestone B playtest checks it against the escape targets. | Game Data & Tuning owner; designer | Next Game Data & Tuning revision; first run playtest |
 
 ### Decisions taken on the designer's behalf (2026-11-28, autonomous mode)
 
@@ -698,7 +733,12 @@ logged. The designer reviews them at the first playable.
 5. Drop Item (G) drops the whole stack in the last filled slot; the panel drops
    any slot by right-click.
 6. Loose items are picked up with Interact, never by walking over them.
-7. Prototype values kept: 16 slots, full-pack slow 0.35.
+7. 16 slots (prototype); **full-pack slow raised to 0.5** from the prototype's
+   0.35, at the Player Controller revision's request (revised 2026-11-28).
+   *Major: it changes a retested value.*
 8. Pick-up range 2.5 m; drop distance 1.0 m.
-9. The escape crossover (F4) is a validation warning outside 0.6 to 0.95.
+9. The escape crossover (F4) is a validation warning outside 0.5 to 0.95;
+   escape times (F5) warn above 8 s and 6 s.
+11. The slow applies on a run only (revised 2026-11-28, with Player
+    Controller).
 10. No sorting, splitting, dragging, auto-pickup or size upgrades in the MVP.
