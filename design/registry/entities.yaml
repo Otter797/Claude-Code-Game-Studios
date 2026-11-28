@@ -280,7 +280,7 @@ formulas:
       - worth
     output_range: [0, 1998000000000]
     expression: "sum over filled slots of count * worth(id); 64-bit"
-    notes: "F5. Feeds the pack worth readout and glow, haul worth at extraction (extraction minus launch, floored at 0) and best-haul statistics."
+    notes: "F5. Feeds the pack worth readout and glow, crew haul worth (sum of extraction minus sum of launch over the crew, floored at 0) and best-haul statistics."
     added: 2026-11-28
     revised: ""
   - name: price_in_runs
@@ -292,11 +292,13 @@ formulas:
       - count
       - worth
       - pacing_haul_worth
+      - pacing_success_rate
+      - expected_yield
     output_range: [0, 999999]
-    expression: "sum(count * worth(id)) / pacing_haul_worth"
-    notes: "F4. Validation-time report only. Bands: recurring cost <= 0.25 runs, one-off 0.5 to 3, ceiling 15 to 30 runs. Building and Crafting price against it."
+    expression: "max(sum(count * worth(id)) / (pacing_haul_worth * pacing_success_rate), max(count / expected_yield(id)))"
+    notes: "F4. Validation-time report only. Bands (tuning): canister <= 0.15 runs, lost drill 0.5 to 1.0, repair <= 0.25, one-off 0.5 to 3, ceiling 15 to 30 runs. Yield price computed once Asteroid World publishes yields. Building and Crafting price against it."
     added: 2026-11-28
-    revised: ""
+    revised: 2026-11-28
   - name: rebuild_stock_ok
     status: active
     source: design/gdd/home-valley.md

@@ -42,3 +42,43 @@ Reviewed-Content-Hash: docs/architecture/adr-0001-network-model.md cc84170cdb537
 Reviewed-Content-Hash: docs/architecture/adr-0002-persistence.md fcc09078ab3cf8ce67a91af226183714eb5d29a8
 Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
 Reviewed-Content-Hash: prototypes/star-haul/REPORT.md b037c022c36f2e2eceecc23d22e0e9fbcbaf8f06
+
+## Review — 2026-11-28 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: M
+Specialists: economy-designer, systems-designer, game-designer, qa-lead, creative-director (senior)
+Blocking items: 7 | Recommended: 12
+Summary: A second, parallel first review run by the `/design-review` side session (the entry above ran at the same time from another session; both reached NEEDS REVISION with overlapping findings). The structure is sound, but the doc did not yet hold Pillar 4: amber had nothing recurring to spend on once the home is built, and worth-0 gear made losses read as free (Pillar 3). F4 rested on a death cost and a haul size nobody measured, and the operations and acceptance criteria were imprecise. Rulings: amber keeps a recurring use through an amber share in canister and better-drill recipes (storm-repair upkeep rejected); an at-risk readout; the ceiling stays accepted with a visible pile in the stash and a rising-cost trophy sink queued; per-id yield pricing written now; split bands; H labelled unmeasured; ids that carry family and tier recommended (left for the designer, since it changes registry ids).
+Prior verdict resolved: First review
+Findings:
+- [BLOCKING] Core Rules R2 / R10: amber has no recurring sink once the home is built; coverage counts existence, not frequency
+- [BLOCKING] Core Rules R9: tools and canisters at worth 0 make losing them read as free
+- [BLOCKING] Formulas F4: fungible-worth pricing although ore cannot be converted; recurring band rests on a false premise; H = 600 from the prototype's old worths
+- [BLOCKING] Core Rules R6 / F3: Move without an id and with `from == to` undefined, negative room for over-cap slots, overflow slots against stable order, duplicate TakeCost sources, no refusal precedence, "Add refused" against F3
+- [BLOCKING] Core Rules R7 / R10: craft output creates units with no faucet row; craft step not an operation; no ledger for conservation tests
+- [BLOCKING] Core Rules R10: "main family" and recurring versus one-off undefined
+- [BLOCKING] Acceptance Criteria: AC24 over-cap case, AC28 not deterministic, AC31 mixed blocking and advisory, Move refusals and Exchange uncovered
+- [RECOMMENDED] Core Rules R2: ids as names force a migration on rename (designer decides)
+- [RECOMMENDED] Formulas F1: bounds let tier 1 floor to 0; justify by worth per slot, not drilling seconds
+- [RECOMMENDED] Edge Cases: retired-id migration check belongs to Save & Load
+- [RECOMMENDED] Interactions: tool and gear common fields against Game Data & Tuning R2 (settled there)
+- [RECOMMENDED] Edge Cases: co-op haul inflation (crew-wide haul)
+- [RECOMMENDED] Edge Cases: stash removal into carried must not overflow
+- [RECOMMENDED] Core Rules R10: quantify the post-ceiling surplus; require the stash pile to be visible in the world
+- [RECOMMENDED] Core Rules R11: canister stack tied to Oxygen's carry limit
+- [RECOMMENDED] Edge Cases: storm-proof pack only while stack scale is 1
+- [RECOMMENDED] Core Rules R10: rebuild guarantee assumes a run on the tank alone
+- [RECOMMENDED] Visual/Audio: teal tiers share one brightness; tier distinction under the lamp
+- [RECOMMENDED] Acceptance Criteria: Logic cores for Run Flow and Save & Load criteria; validation ranges; list Milestone A deferrals
+Reviewed-Content-Hash: design/gdd/ore-and-item-economy.md b0a3d3490bad7892071a78cd9aa307382ace6c4a
+Reviewed-Content-Hash: design/registry/entities.yaml 91b6aada4b259dfb9ce48d8a77908f108897d523
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/game-data-and-tuning.md 22b2414d61b302121046b75b87f54d25e342a7ba
+Reviewed-Content-Hash: design/gdd/session-and-authority.md f37a68281a0fd4afd3cb7fba25e689512daff35a
+Reviewed-Content-Hash: design/gdd/game-concept.md 938271886e41e9485ac0192a80f58c67d7875873
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+Reviewed-Content-Hash: prototypes/star-haul/REPORT.md b037c022c36f2e2eceecc23d22e0e9fbcbaf8f06
+Note: the target and registry hashes stamp them as reviewed (before revision 1).
+
+### Revision 1 — 2026-11-28 (not a review)
+Every blocking item from both 2026-11-28 reviews revised in the same side session, at the designer's standing approval: amber share in canister and better-drill recipes with frequency-aware coverage and `recurrence` tags; refine-down so worth and exact costs agree (the other review's worth-versus-exact-ore blocker); at risk; crew-wide haul worth; container ids and owners, per-player death clears (ADR-0003 amendment raised); `Move` with an id, `Exchange`, `Clear` into a named sink, refusal precedence, F3 clamped, overflow slots after the last index; the ledger; main family and recurrence defined; F4 rebuilt (worth per attempt, yield price, split bands as tuning values, surplus line); typed `family`, per-kind worth limits, toughness in seconds, tier 3 restated at the better drill; F1 bounds narrowed; acceptance criteria rewritten (35); registry `price_in_runs` and `container_worth` notes updated. Ids carrying family and tier left for the designer (Open Questions 2). The CD rulings are decisions 15 to 25. Status In Review; a fresh-session `/design-review` decides Approved.
