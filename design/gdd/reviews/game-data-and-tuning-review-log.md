@@ -83,3 +83,46 @@ Reviewed-Content-Hash: docs/architecture/adr-0001-network-model.md cc84170cdb537
 Reviewed-Content-Hash: docs/architecture/adr-0002-persistence.md fcc09078ab3cf8ce67a91af226183714eb5d29a8
 Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
 Reviewed-Content-Hash: prototypes/star-haul/config.js 55a14141ee3b2ccb741b84b9fe7e0e1979f5ce38
+
+## Review — 2026-11-28 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: M
+Specialists: game-designer, systems-designer, qa-lead, unity-specialist, creative-director (senior)
+Blocking items: 10 | Recommended: 11
+Summary: A second, parallel re-review run by the `/design-review` side session (the review recorded above in c02cc46 ran at the same time from another session; both reached NEEDS REVISION with largely the same findings). Nine of ten first-review blockers are resolved; what remains is precision (D2's decimal count and grid, float width, the D4 layout), batch validation of live changes, a safe "keep", live values reaching client-side readers, and drift against the three sibling GDDs now written. Rulings: fail-hard stays; compile-time gate for live tuning; floats are doubles; joins refused by fingerprint, not revision.
+Prior verdict resolved: Yes (9 of 10 fully; D2's fix introduced new defects)
+Findings:
+- [BLOCKING] Formulas D2: `d` taken from min and step only (a 0..1 range with no step gets d = 0 and duplicate positions); define over min, max and effective step with a portable round-trip count, scaled-integer grid, k_max cap
+- [BLOCKING] Core Rules R3 / D3 / D4: float precision never stated; rules-view floats are 64-bit doubles from parse
+- [BLOCKING] Core Rules R12: requests valid alone can break a constraint together in one batch; re-check the combined revision
+- [BLOCKING] Core Rules R12: "keep" can write an asset that fails validation at next start
+- [BLOCKING] Core Rules R10 / R12: live changes never reach Input and Player Controller, which read tuning outside the Simulation
+- [BLOCKING] Game Feel: "next frame, about 17 ms" contradicts Session & Authority's 30 Hz tick and pause; restate as next tick, "queued (paused)" on the panel
+- [BLOCKING] Core Rules R8 / R11: start-up depends on the start-up scene; Play from any scene with domain reload off
+- [BLOCKING] Formulas D4: sort key, type tags, enum, absent-field and list encodings unspecified
+- [BLOCKING] Dependencies / Interactions / Tuning Knobs: stale against Session & Authority, Input and Ore & Item Economy (`tuning.economy`, prototype ore values, holdable-field ownership)
+- [BLOCKING] Acceptance Criteria: AC12 check numbers, AC15 maps to no check, ADR-0004-dependent ACs not provisional, AC9 git history, AC26 split, traceability overclaims (read-once, Addressables group, passed values, load keeps live values, retired message, reset)
+- [RECOMMENDED] Tuning Knobs: `live_tuning_enabled` as data contradicts the build provider; compile-time gate
+- [RECOMMENDED] Core Rules R12 / Edge Cases: joins refused by fingerprint instead of revision > 1
+- [RECOMMENDED] Core Rules R9: unreadable asset cascades into missing-key records
+- [RECOMMENDED] Core Rules R3: define release-candidate build and gate provisional at build time
+- [RECOMMENDED] Core Rules R3: constraints require same unit and numeric operands
+- [RECOMMENDED] Formulas D1: finite(max − min)
+- [RECOMMENDED] Dependencies: parser with invariant culture; generated data manifest with a CI check
+- [RECOMMENDED] UI Requirements: reset returns to revision 1, never re-reads assets
+- [RECOMMENDED] Edge Cases: development-only storm reschedule (deferred to the ADR-0004 list)
+- [RECOMMENDED] Core Rules R3: `restart` requires a reason
+- [RECOMMENDED] Core Rules R2: retired list cited as R9, defined in R14
+Reviewed-Content-Hash: design/gdd/game-data-and-tuning.md 0a88e110b40895b7451b2759c0c26cf7e215dc3b
+Reviewed-Content-Hash: design/registry/entities.yaml b5a525057786c8368c6935448e7676191646fde3
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/session-and-authority.md 56052cdb82245100a8deb59e2984580acc240911
+Reviewed-Content-Hash: design/gdd/input.md f385068b2c3dd573b538fb000c6f5d9a794ed947
+Reviewed-Content-Hash: design/gdd/ore-and-item-economy.md b0a3d3490bad7892071a78cd9aa307382ace6c4a
+Reviewed-Content-Hash: design/gdd/game-concept.md 938271886e41e9485ac0192a80f58c67d7875873
+Reviewed-Content-Hash: docs/architecture/adr-0001-network-model.md cc84170cdb537f0c15976dd57743b457eb7a5897
+Reviewed-Content-Hash: docs/architecture/adr-0002-persistence.md fcc09078ab3cf8ce67a91af226183714eb5d29a8
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+
+### Revision 2 — 2026-11-28 (not a review)
+Every blocking item from both 2026-11-28 reviews revised in the same side session, at the designer's standing approval: D2 rebuilt on a scaled-integer grid; doubles throughout; combined-revision check, safe "keep" and "keep set", reset to revision 1, "queued (paused)"; readers outside the Simulation get the published revision; compile-time gate; joins by fingerprint; scene-independent start-up; D4 layout with a type-tag table and hand-written golden hex; R9 field types, check-order and cascade wording (retired references always reported), tuning records under check 4; the per-kind limits set (R1) added by the c02cc46 session kept; shared holdable fields owned by Ore & Item Economy; unit `hz`; stale tables fixed; 11 acceptance criteria added (46 to 55, plus 9b, 26b, 40b) and the traceability table brought up to date. The CD rulings are decisions 18 to 27. Status In Review; a fresh-session `/design-review` decides Approved. Note: the hashes above stamp the documents as reviewed (before this revision), so the next review sees the target as CHANGED.
