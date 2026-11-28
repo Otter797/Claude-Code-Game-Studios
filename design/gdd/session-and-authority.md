@@ -1,9 +1,9 @@
 # Session & Authority
 
-> **Status**: Designed (pending `/design-review` in a fresh session)
-> **Creative Director Review (CD-GDD-ALIGN)**: APPROVED 2026-11-27 (run in-session by `/design-system` as a checklist, no agent spawned; autonomous mode)
+> **Status**: In Review (revision 1, 2026-11-28, after the first `/design-review`, verdict NEEDS REVISION; awaiting re-review)
+> **Creative Director Review (CD-GDD-ALIGN)**: APPROVED 2026-11-27 (run in-session by `/design-system` as a checklist, no agent spawned; autonomous mode). Senior review in `/design-review` 2026-11-28: NEEDS REVISION, see `design/gdd/reviews/session-and-authority-review-log.md`
 > **Author**: designer + Claude (design-system, autonomous mode)
-> **Last Updated**: 2026-11-27
+> **Last Updated**: 2026-11-28 (revision 1)
 > **Last Verified**: 2026-11-27
 > **Implements Pillar**: Pillar 2 (Risk is a choice), Pillar 3 (Bright world, real stakes), Pillar 5 (Home is the scoreboard); co-op designed in (concept, Technical Risks)
 
@@ -65,9 +65,16 @@ Two supporting lines follow:
 - **Nothing you did is lost to the save.** Every action at home is saved with
   its cost in one step, so a crash undoes at most the last action or two as a
   whole (ADR-0003). The home really is the scoreboard (Pillar 5) because the
-  game never quietly loses a piece of it. And the sting stays real (Pillar 3):
-  quitting or crashing during a run costs what was carried, exactly as dying
-  would, and the player is told so before they quit and again when they return.
+  game never quietly loses a piece of it: if saving starts failing, the player
+  sees "Unsaved changes" until a save succeeds. And the sting stays real
+  (Pillar 3): **an unfinished run is an unbanked run.** Quitting or crashing
+  during a run costs what was carried, exactly as dying would (ADR-0002). A
+  quit is the player's choice and they are told before they make it; a crash
+  is not a danger of the game, so the rule is disclosed plainly (a first-run
+  tip, and the abandoned-run notice when they return) rather than dramatised.
+  The one rare exception: if the player's disk refuses the run-end write and
+  the player chooses to quit while it retries, the extraction is lost too;
+  the Quit option says so in those words before they choose.
 
 What this asks of the rest of the design: every system that changes state does
 so through a request this system can check, and every refusal has a reason the
@@ -109,61 +116,104 @@ Simulation-owned identity that outlives a network connection (ADR-0001). In
 solo play the one player's id is the profile's player id from the save. The
 network client id is never used as an identity in rules or saves.
 
-**R3. Every state change is a request.** Anything that changes game state
-reaches the Simulation as a request: the player id, the *intent* (place piece,
-remove piece, repair all, gather, stash move, craft, launch run, mine, pick
-up, extract, and any intent a later design doc adds), its arguments, and a
-sequence number. Each intent is owned by the system whose rule decides it;
-this system owns the request's envelope and its handling. Movement and looking
-are not requests: they are owned by the player's own client (ADR-0001) and
-the host trusts the reported position for range checks, an accepted shortcut
-to revisit before networked melee.
+**R3. Every player-made state change is a request.** Anything a player does
+that changes game state reaches the Simulation as a request: the player id,
+the *intent* (place piece, remove piece, repair all, gather, stash move,
+craft, launch run, mine, pick up, drop, extract, and any intent a later design
+doc adds), its arguments, and a sequence number. Changes the Simulation makes
+on its own each tick (oxygen draining, creatures moving, storms resolving)
+are not requests; they are host-internal, and are published the same way
+(R8). Each intent is owned by the system whose rule decides it; this system
+owns the request's envelope and its handling. Two more intents come from
+outside play and share the same queue, so everything is handled in one
+order: a **live tuning change** (development builds and solo sessions only,
+Game Data & Tuning R12) and, from Tier 2a, a **join**.
 
-**R4. How a request is handled.** On the host, at the start of each tick,
-before the Simulation's `Tick(dt)`:
+**Sequence numbers.** Each player's client numbers its requests with a 32-bit
+unsigned number that starts at 1 for each session and rises by one per
+request. The host keeps the last number it handled per player and refuses a
+request whose number is not higher with **Duplicate** (a resend or a stale
+request). "Arrival order" means the order the host receives requests, which
+is guaranteed per client only. The wire format is the co-op ADR's.
+
+Movement and looking are not requests: they are owned by the player's own
+client (ADR-0001), and the host trusts the reported position for range
+checks, an accepted shortcut to revisit before networked melee. While the
+session is frozen (R5's "Frozen" and "Ignored" cells), the host publishes a
+frozen flag that every client's Player Controller obeys.
+
+**R4. How a request is handled.** Network handlers on the host only put
+incoming requests in the queue; they never handle one directly (a request from
+the host's own player can arrive immediately, mid-frame). Once per rendered
+frame, before that frame's ticks (F1), and **whether or not any tick runs this
+frame**, the host drains the queue, so a request made while paused or saving
+still gets its refusal at once:
 
 1. Requests are taken in the order they arrived.
 2. The **session check** runs (R5): may this intent be accepted in the current
    session state? If not, the request is refused with a session reason.
 3. Otherwise the owning system's `Try…` method is called with the request. It
-   returns either *accepted*, with the list of what changed and the model's new
-   revision number, or *refused*, with a reason the owning system defines
-   (for example Building's "not enough materials").
-4. An accepted change is applied, and the change list is published to every
-   client's Presentation (R8).
+   returns either *accepted*, with the list of what changed, or *refused*,
+   with a reason the owning system defines (for example Building's "not enough
+   materials"). If it throws, the request is refused with **Internal error**
+   (Edge Cases).
+4. An accepted change is applied, the **model revision** rises by one, and
+   the change list, stamped with it, is published to every client's
+   Presentation (R8).
 5. If the intent is a home action, a save point follows (R10).
 6. The requesting player receives exactly one result for each request,
    matched by its sequence number. A refusal goes only to that player.
+
+If a request changes the session state (a launch accepted), the rest of the
+queue is handled against the new state and the frame's remaining ticks are
+not run. Then the frame's ticks run (F1).
+
+**Two revision streams, never mixed.** The *model revision* counts accepted
+changes to game state, including tick-driven ones that are published (a
+storm resolving, run end); it is saved with the model. The *catalog revision*
+counts live tuning changes (Game Data & Tuning R12) and is never saved. Change
+lists travel on a reliable, ordered channel; a view that sees a gap in model
+revisions, or has just loaded a scene, asks for the full state.
 
 The host never trusts a result a client supplies: a client says what it wants,
 never what happened.
 
 **R5. The session check.** Whether an intent may be accepted depends only on
-the session state (States and Transitions) and two flags, *paused* and *a
-waited write is pending*:
+the session state (States and Transitions), the *paused* flag and, in At
+Home, whether a *waited write is pending* (the retry after a failed
+marker-free write, R12). Off and Refused have no session, so no request can
+arrive in them. Checks run in this order, and the first that applies gives
+the reason: **Saving** before **Paused** before the rest.
 
-| Intent class | Off, Starting, Loading, Resolving, Stopping, Refused | At Home | Launching Run, Ending Run | In Run |
+| Intent class | Starting, Loading, Resolving, Stopping | At Home | Launching Run, Ending Run, or At Home with a waited write pending | In Run |
 |---|---|---|---|---|
 | Home action (place, remove, repair, gather, stash move, craft) | Refused: Not now | Accepted for checking, unless paused (Refused: Paused) | Refused: Saving | Refused: Wrong place |
-| Launch run | Refused: Not now | Accepted for checking, unless paused | Refused: Saving | Refused: Wrong place |
-| Run action (mine, pick up, use, extract) | Refused: Not now | Refused: Wrong place | Refused: Saving | Accepted for checking, unless paused (Refused: Paused) |
-| Movement, look (not a request) | Ignored | Allowed unless paused | Frozen | Allowed unless paused |
+| Launch run | Refused: Not now | Accepted for checking, unless paused (Refused: Paused) | Refused: Saving | Refused: Wrong place |
+| Run action (mine, pick up, drop, use, extract) | Refused: Not now | Refused: Wrong place | Refused: Saving | Accepted for checking, unless paused (Refused: Paused) |
+| Live tuning change (development builds, solo only) | Refused: Not now | Queued for the next tick (Game Data & Tuning R12) | Queued for the next tick | Queued for the next tick |
+| Join (Tier 2a) | Refused: Not now | Accepted for checking by the co-op rules; refused if the catalog fingerprint differs from revision 1's (Game Data & Tuning R12) | Refused: Saving | Per the co-op ADR |
+| Movement, look (not a request) | Frozen | Allowed unless paused | Frozen | Allowed unless paused |
 
 Session refusal reasons are a closed list owned here: **Not now**, **Paused**,
 **Saving**, **Wrong place**, **Unknown player**, **Malformed** (arguments that
-fail basic checks, such as an id the catalog does not know). Requests refused
-while saving are not queued for later: the player sees "Saving…" and acts again
-when it clears. Queuing them would let an action land after a state the player
-did not see.
+fail basic checks, such as an id the catalog does not know), **Duplicate** (a
+sequence number already handled, R3) and **Internal error** (the owning rule
+threw). Only the owning systems' reasons and "Saving…" are shown to the player
+(UI Requirements); the others mean a bug or an impossible input and go to the
+log. Requests refused while saving are not queued for later: the player sees
+"Saving…" and acts again when it clears. Queuing them would let an action land
+after a state the player did not see.
 
 **R6. The fixed tick.** The Simulation advances in fixed steps of
 `1 / tick_rate_hz` seconds (formula F1), never by the frame's length, so every
 rule gives the same result at any frame rate. Ticks run only in At Home and In
 Run, and only while not paused and no waited write is pending. Long frames are
-caught up by running several ticks, up to `max_ticks_per_frame`; time beyond
-that is dropped, not owed. Which engine callback drives the tick is a choice
-ADR-0001 deferred to the first gameplay story; whichever it is, it must follow
-F1.
+caught up by running several ticks, up to the cap F1 derives; time beyond that
+is dropped, not owed. F1 measures frames in real, unscaled time, never the
+engine's scaled frame time. Which engine callback drives the tick is a choice
+ADR-0001 deferred to the first gameplay story; whichever it is, the tick and
+pause stay independent of the engine's time scale and of Netcode's network
+time (which does not pause), and it must follow F1.
 
 **R7. The play-time clock.** The storm clock (owned by Storms, ADR-0003)
 advances by exactly one tick's length per tick (formula F2), so it counts only
@@ -171,7 +221,10 @@ time spent playing: not the main menu, not loading, not saving waits, not
 pause, not while closed. This system feeds the ticks; it never reads the wall
 clock and never depends on the engine's time scale. At home, after each tick,
 it calls Storms' `AdvanceTo(playTime)`; if any storm resolved, that is a save
-point (R10). During a run it does not call `AdvanceTo` (ADR-0003); the clock
+point (R10). It also calls `AdvanceTo` once on entering At Home (from Loading,
+Resolving or Ending Run), before the first request is taken, so a storm that
+fell due while the game was closed lands before the player can act, and
+nothing can be carried out of the home ahead of it. During a run it does not call `AdvanceTo` (ADR-0003); the clock
 still advances so the run HUD can warn of the next storm. Every
 `note_interval_s` of play time (Save & Load's tuning value, about 30 s) it asks
 the save queue to write the play-time note (formula F4), at home and in runs.
@@ -189,30 +242,52 @@ game pauses itself when its window loses focus (a player setting, default on,
 owned by Menus & Settings). Pause stops the tick: oxygen, creatures, hunters,
 mining, the storm clock, everything, both at home and during a run. Pause is
 an explicit state this system passes to the Simulation (ADR-0003), never a
-change of the engine's time scale. While paused, requests are refused with
-"Paused" and movement is frozen. With more than one player in the session,
-pause and auto-pause are unavailable (whether a co-op host may pause is for
-the co-op ADR).
+change of the engine's time scale for the Simulation. While paused, requests
+are refused with "Paused" and movement is frozen.
+
+**Nothing moves while paused.** Everything that moves in a way rules depend
+on is driven by the Simulation tick: creature movement, physics the rules
+read (stepped by script, never by the engine on its own) and timers. What
+only looks alive (animation, effects, ambient audio) is Presentation, which
+may use a time scale of 0 or suspend those components by name while paused.
+So a paused frame shows exactly the world as it stood.
+
+The *paused* flag can be set in At Home, In Run, Launching Run and Ending
+Run; set during a waited write, it holds after the write returns (Edge
+Cases). Focus loss is detected per platform, including the editor, where
+focus moving to another editor window counts; an overlay that does not take
+window focus does not pause the game. With more than one player in the
+session, pause and auto-pause are unavailable (whether a co-op host may pause
+is for the co-op ADR).
 
 **R10. Save points and waited writes.** This system is the only caller of the
 save queue (`ISaveQueue`, ADR-0003):
 
-- **Home save points.** After every accepted home action and every storm
-  resolution at home, it takes one snapshot of the whole save model and hands
-  it to the queue with `Request`. It does not wait. An action's cost and result
-  are always in the same snapshot, so they reach the disk together.
-- **Waited writes.** At run start (the run marker), at run end, when an
-  abandoned run is resolved at start-up, and during load (which may migrate),
-  it uses `RequestAndWait` (or `LoadAndWait`) and holds the session in a
-  waiting state until the result arrives. While one is pending, the clock and
-  all home save points are held and the "Saving…" indicator is shown (formula
-  F5). The main thread never blocks.
+- **Home save points.** At the end of every frame in which a home action was
+  accepted or a storm resolved at home, it takes one snapshot of the whole
+  save model and hands it to the queue with `Request`. It does not wait. One
+  snapshot covers every change of that frame, so a fast run of placements
+  does not queue dozens of snapshots, and an action's cost and result are
+  always in the same snapshot, so they reach the disk together.
+- **Waited writes.** At run start (the run marker), at run end, and when an
+  abandoned run is resolved at start-up, it uses `RequestAndWait` and holds
+  the session in a waiting state until the result arrives; at load it uses
+  `LoadAndWait`, which has no time-out and whose failure leads to Refused
+  (States). While one is pending, the clock and all home save points are held
+  and the "Saving…" indicator is shown (formula F5). The main thread never
+  blocks: time-outs and retry delays are timed in real time and checked each
+  frame.
 - **A waited write that fails or times out** (`waited_write_timeout_s`) is
   retried with growing delays (formula F3) and the player is told; no home
   action is accepted until it succeeds. At run start a failed marker write
-  cancels the launch instead, as ADR-0003 Decision 11 sets out (R12).
-- **A failed home save** is reported once, without blocking, and the next save
-  point tries again.
+  cancels the launch instead, as ADR-0003 Decision 11 sets out (R12). The load
+  is never retried this way.
+- **A failed home save** does not block. From the first failure until a save
+  succeeds, the HUD shows a persistent "Unsaved changes" mark; each later save
+  point tries again with the whole model. After
+  `home_save_fail_block_count` failures in a row, a blocking notice says that
+  progress is not being saved and why, with Retry and Quit; play resumes when
+  a save succeeds or the player dismisses it.
 
 **R11. Building the Simulation.** At session start, after the game data
 catalog is ready (Game Data & Tuning), this system builds each Simulation
@@ -227,11 +302,14 @@ and ADR-0003 exactly; this system is the one that carries them out.
 
 - **Launch.** A *launch run* request accepted at home moves to Launching Run.
   The Simulation's `BeginRun(carried)` writes the run marker into the model; the
-  snapshot is written with `RequestAndWait`. Success: the scene changes to the
-  run and the session enters In Run. Failure or time-out: the launch is
+  snapshot is written with `RequestAndWait`. Success: the run scene loads, and
+  the session stays in Launching Run (tick held, requests refused with
+  "Saving…", movement frozen) until the load reports complete, then enters In
+  Run. Failure or time-out of the write, or a failed scene load: the launch is
   cancelled, the marker is removed from the model, a marker-free snapshot is
-  written and waited for, and the player stays home with a message. If that
-  write fails too, it is retried (F3) and no home action is accepted until it
+  written and waited for, and the player stays home with a message naming
+  what failed. If that write fails too, the session is At Home with a waited
+  write pending: it is retried (F3) and no home action is accepted until it
   succeeds.
 - **End.** Run Flow raises the end of a run (extraction or death); it never
   calls Storms or Stash itself. The session enters Ending Run and, in this
@@ -239,12 +317,18 @@ and ADR-0003 exactly; this system is the one that carries them out.
   during the run is applied first; has the haul placed (Stash's and Run Flow's
   rules decide where; on a death there is none); calls `EndRun(outcome)`, which
   records the outcome and clears the marker; takes one snapshot; writes it with
-  `RequestAndWait`. On success the scene returns home and the session enters At
-  Home; on failure it retries (F3) and stays in Ending Run.
+  `RequestAndWait`. On success the home scene loads, the session stays in
+  Ending Run until the load reports complete, then enters At Home (where
+  `AdvanceTo` runs once more, R7, finding nothing new). A failed home scene
+  load is retried (F3) in Ending Run; the write has already landed, so nothing
+  is at risk. On a write failure it retries (F3) and stays in Ending Run; the
+  failure notice offers Quit labelled "Quitting now loses this haul" (Edge
+  Cases).
 - The run-end sequence is a plain C# method on the Authority side, testable
   with no Netcode (ADR-0003).
 - How the scene change itself is driven under a host is deferred to the first
-  gameplay story (ADR-0001) and is not specified here.
+  gameplay story (ADR-0001); this document fixes only that the waiting state
+  lasts until the load reports complete, and what a failed load does.
 
 **R13. Quitting.** On an orderly quit (to the main menu or the desktop):
 requests stop being accepted, the queue is drained (any waiting snapshot is
@@ -255,6 +339,19 @@ lost; the run marker stays on disk and the next start resolves it as an
 abandoned run (ADR-0002: leaving a run is a death). Correctness never depends on
 the quit steps running: a kill instead of a quit loses only what a crash
 loses.
+
+- **Quit from every state.** A quit may be asked for in any state with a
+  session (Starting, Loading, Resolving, At Home, Launching Run, In Run,
+  Ending Run). In Starting, Loading and Resolving it waits for the step in
+  progress to finish (those states never abandon a write midway), then
+  stops. In Launching Run and Ending Run, Stopping waits for the pending write
+  within `quit_drain_timeout_s`; whatever reached the disk decides the next
+  start.
+- **Quitting to the desktop** (closing the window, Alt+F4) goes through the
+  same path: the engine's quit request is held, the confirmation is shown if
+  a run is in progress, the drain runs over the next frames without blocking,
+  and then the application quits. Leaving Play Mode in the editor does not
+  give the game that chance and counts as a kill.
 
 **R14. Milestone A.** Milestone A has no runs. Launch run, In Run, Launching
 Run and Ending Run do not exist yet; the session goes Off → Starting →
@@ -271,32 +368,37 @@ unchanged.
 | **Loading** | `LoadAndWait()` running on the save writer; no time-out (ADR-0003) | Stopped | Refused: Not now |
 | **Resolving** | A run marker was found: storms applied, carried items lost, marker cleared, written and waited for | Stopped | Refused: Not now |
 | **At Home** | Home scene; normal play | Running unless paused | Per R5 |
-| **Launching Run** | Run marker write pending | Held | Refused: Saving |
+| **Launching Run** | Run marker write pending, then the run scene loading | Held | Refused: Saving |
 | **In Run** | Run scene | Running unless paused | Per R5 |
-| **Ending Run** | Run-end sequence and its write pending | Held | Refused: Saving |
+| **Ending Run** | Run-end sequence and its write pending, then the home scene loading | Held | Refused: Saving |
 | **Stopping** | Draining the queue and writing the final note | Stopped | Refused: Not now |
 | **Refused** | The save could not be opened (newer version, locked by another running copy, unreadable with no readable backup) | Stopped | None |
 
-*Paused* is a flag on At Home and In Run, not a state of its own.
+*Paused* is a flag on At Home, In Run, Launching Run and Ending Run, not a
+state of its own. *A waited write pending* is a flag on At Home only, set
+while a failed marker-free write is retried (R12).
 
 | From | To | Trigger |
 |---|---|---|
 | Off | Starting | Player presses Play (game data catalog already Ready) |
 | Starting | Loading | Host started; Simulation built |
-| Starting | Refused | Host could not start, or another running copy holds the save lock |
-| Loading | At Home | Load result: loaded, loaded from a backup (player told), or new profile; no run marker |
+| Starting | Refused | Host could not start |
+| Loading | At Home | Load result: loaded, loaded from a backup (player told), or new profile; no run marker. `AdvanceTo` runs once (R7) |
 | Loading | Resolving | Load result says a run was abandoned (marker found) |
-| Loading | Refused | Load result: newer version, locked, or unreadable |
+| Loading | Refused | Load result: newer version, locked by another running copy, or unreadable |
 | Resolving | At Home | Resolution written; abandoned-run notice shown |
 | Resolving | Resolving | Resolution write failed: retry (F3) |
 | At Home | Launching Run | Launch run request accepted |
-| Launching Run | In Run | Marker write succeeded; scene changed |
-| Launching Run | At Home | Marker write failed or timed out; marker-free snapshot written |
+| Launching Run | Launching Run | Marker write succeeded; run scene loading |
+| Launching Run | In Run | Run scene load complete |
+| Launching Run | At Home | Marker write failed or timed out, or the run scene failed to load; marker-free snapshot written (if that write fails, At Home with a waited write pending) |
 | In Run | Ending Run | Run Flow raises the end of the run |
-| Ending Run | At Home | Run-end write succeeded; scene changed |
-| Ending Run | Ending Run | Run-end write failed: retry (F3) |
+| Ending Run | Ending Run | Run-end write failed: retry (F3); or write succeeded and the home scene is loading, or its load failed and is retried |
+| Ending Run | At Home | Home scene load complete |
+| Starting, Loading, Resolving | Stopping | Player quits, once the step in progress finishes (R13) |
 | At Home, In Run | Stopping | Player quits (from a run, after confirming) |
-| Stopping | Off | Drain and note done, or `quit_drain_timeout_s` reached (to main menu) |
+| Launching Run, Ending Run | Stopping | Player quits (from Ending Run after a failed write, after the "Quitting now loses this haul" confirmation) |
+| Stopping | Off | Drain and note done, or `quit_drain_timeout_s` reached; then to the main menu, or the application quits (to desktop) |
 | Refused | Off | Player acknowledges the message |
 
 No other transition exists. In particular, In Run never returns to At Home
@@ -306,14 +408,15 @@ returns.
 **Start-up order.** Game data catalog Ready (Game Data & Tuning) → Starting
 (`StartSolo`) → Loading (`LoadAndWait`) → on the main thread, pick the later of
 the save's clock and the play-time note's clock (ADR-0003 Decision 8) → resolve
-a run marker if there is one → At Home, where the first home tick applies any
-storm that fell due between the last save and a crash.
+a run marker if there is one → At Home, where `AdvanceTo` runs once before any
+request (R7) and applies any storm that fell due between the last save and a
+crash.
 
 ### Interactions with Other Systems
 
 | System | Direction | What flows | Interface owner |
 |---|---|---|---|
-| Game Data & Tuning | In | The catalog's rules view at session start (each system's tuning set and definitions); `tuning.session_and_authority` | Game Data & Tuning |
+| Game Data & Tuning | In / Out | In: the catalog's rules view at session start (each system's tuning set and definitions); `tuning.session_and_authority`. Out: live tuning changes and joins go through this system's queue (R3, R5); it publishes the catalog revision so readers outside the Simulation (Input, Player Controller) get new values (Game Data & Tuning R10, R12) | Game Data & Tuning owns the rules; this system owns the queue and hand-over |
 | Save & Load (`ISaveQueue`) | Out / In | `LoadAndWait`, `Request`, `RequestAndWait`, `NotePlayTime`, `Drain`; load results and failure notices back | ADR-0003 fixes the interface; Save & Load's design doc owns the store's behaviour; this system is its only caller |
 | Building, Stash, Storms (through `IHomeSimulation`) | Out | Home requests; `Snapshot()`; `AdvanceTo(playTime)` at home ticks and once at run end; `StormReport`s back for Presentation | Each system owns its rules; this system owns when they are called |
 | Gathering, Crafting, Pack | Out | Their intents as requests; change lists back | Owners |
@@ -336,24 +439,30 @@ The `ticks_this_frame` formula is defined as, each rendered frame while the
 tick runs (R6):
 
 ```
+max_ticks_per_frame = ceil(max_frame_dt_s × tick_rate_hz)
 acc   = acc + min(frame_dt_s, max_frame_dt_s)
 ticks = min(floor(acc / tick_dt_s), max_ticks_per_frame)
-acc   = acc − ticks × tick_dt_s
-if ticks = max_ticks_per_frame: acc = min(acc, tick_dt_s)
+acc   = clamp(acc − ticks × tick_dt_s, 0, tick_dt_s − ε)
 ```
 
-with `tick_dt_s = 1 / tick_rate_hz`. While the tick is stopped or held (any
-state but At Home and In Run, paused, or a waited write pending), `acc = 0`.
+with `tick_dt_s = 1 / tick_rate_hz`, all in double precision, and `ε` the
+smallest double step, so `acc` stays in [0, tick_dt_s). `frame_dt_s` is real,
+unscaled time since the last frame (not the engine's scaled frame time, which
+a time scale or the engine's own long-frame cap would change). The cap on
+ticks is derived, not tuned, so a counted frame can never lose time at any
+legal knob values. While the tick is stopped or held (any state but At Home
+and In Run, paused, or a waited write pending), `acc = 0`. If a request
+changes the session state, the frame's remaining ticks are not run (R4).
 
 **Variables:**
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| frame_dt_s | float | ≥ 0 | calculated | Real time since the last frame |
-| max_frame_dt_s | float | 0.05–1 | data file | Longest frame counted; a longer one (a debugger break, a disk stall) counts as this |
+| frame_dt_s | double | ≥ 0 | calculated | Real, unscaled time since the last frame |
+| max_frame_dt_s | double | 0.05–1 | data file | Longest frame counted; a longer one (a debugger break, a disk stall) counts as this |
 | tick_rate_hz | int | 20–60 | data file | Simulation ticks per second (default 30, provisional until the ADR-0001 amendment fixes the tick source) |
-| tick_dt_s | float | 1/60–1/20 | calculated | Length of one tick |
-| max_ticks_per_frame | int | 1–10 | data file | Most ticks run in one frame |
-| acc | float | 0 to < tick_dt_s after each frame (except at the cap) | calculated | Unspent time carried to the next frame |
+| tick_dt_s | double | 1/60–1/20 | calculated | Length of one tick |
+| max_ticks_per_frame | int | 1–60 | calculated | Most ticks run in one frame: ceil(max_frame_dt_s × tick_rate_hz); 8 at the defaults |
+| acc | double | 0 to < tick_dt_s after each frame | calculated | Unspent time carried to the next frame |
 | ticks | int | 0 to max_ticks_per_frame | calculated | Ticks run this frame |
 
 **Output Range:** 0 to `max_ticks_per_frame` ticks per frame. At 60 frames per
@@ -362,10 +471,11 @@ a frame.
 **Boundaries:** `frame_dt_s = 0` gives 0 ticks. A 5 s stall counts as
 `max_frame_dt_s` (0.25 s) → 7 ticks at 30 Hz (under the cap of 8), and the
 other 4.75 s are never owed, so the game never tries to catch up for seconds
-("spiral of death"). The cap clause only bites if the knobs are changed so that
-`max_ticks_per_frame × tick_dt_s < max_frame_dt_s` (see Tuning Knobs). `max_ticks_per_frame = 1` is legal but makes play slow
-down below `tick_rate_hz` frames per second. `tick_rate_hz` cannot be 0 (range
-starts at 20), so the division is defined.
+("spiral of death"). At the knob extremes (max_frame_dt_s 1, 60 Hz) the cap
+is 60 ticks: a one-second stall is fully caught up in one burst. Below 1 /
+max_frame_dt_s frames per second (4 at the default), play slows down, by
+design. `tick_rate_hz` cannot be 0 (range starts at 20), so the division is
+defined.
 **Example:** 30 Hz (tick 0.0333 s), frame of 0.05 s, acc 0.02: acc = 0.07 →
 ticks = 2 → acc = 0.0033.
 
@@ -382,13 +492,17 @@ using Game Data & Tuning's D3, in double precision, without rounding per tick
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
 | play_time_ms | double | 0 upward | calculated (saved by Storms) | The storm clock |
-| tick_dt_s | float | 1/60–1/20 | calculated (F1) | Length of one tick |
+| tick_dt_s | double | 1/60–1/20 | calculated (F1) | Length of one tick |
 | 1000 | int | — | constant | Milliseconds per second |
 
-**Output Range:** grows by exactly 3,600,000 per hour of unpaused play at any
-tick rate; never grows in the menu, loading, saving waits or pause.
-**Boundaries:** no tick, no change. Double precision keeps whole milliseconds
-exact for far longer than any profile will be played.
+**Output Range:** grows by 3,600,000 (within about 1 ms of rounding) per hour
+of *ticks* at any tick rate, which equals an hour of unpaused play whenever
+no frame is longer than `max_frame_dt_s`; time dropped by F1 in a stall is not
+counted, so the clock never runs ahead of play. It never grows in the menu,
+loading, saving waits or pause.
+**Boundaries:** no tick, no change. Double precision keeps the sum's rounding
+error far below a millisecond for far longer than any profile will be
+played.
 **Example:** at 30 Hz each tick adds 33.333… ms; 108,000 ticks (one hour) add
 3,600,000 ms.
 
@@ -402,17 +516,19 @@ timed-out waited write (R10):
 **Variables:**
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| k | int | 1 upward | calculated | Retry number |
-| retry_base_s | float | 0.25–5 | data file | First delay |
-| retry_cap_s | float | 2–60, ≥ retry_base_s | data file | Longest delay |
+| k | int | 1 upward | calculated | Retry number; starts at 1 for each waited write (the marker-free write after a cancelled launch starts again at 1) |
+| retry_base_s | double | 0.25–5 | data file | First delay |
+| retry_cap_s | double | 5–60 | data file | Longest delay (its range starts at retry_base_s's maximum, so it can never be below it; constraint `retry_base_s ≤ retry_cap_s`) |
+
+Delays are measured in real time (the play-time clock is held during them).
+The delay is computed by doubling the previous delay and stopping at the cap,
+never by computing 2^(k − 1) as an integer, so no k can overflow.
 
 **Output Range:** `retry_base_s` to `retry_cap_s`. Defaults (1 s, 8 s): 1, 2,
 4, 8, 8, 8… s.
-**Boundaries:** `k = 0` is not a retry (the first attempt has no delay). Large
-k cannot overflow in effect, since the result is capped (implementations stop
-doubling once the cap is reached). Retries never stop on their own: the player
-is shown the failure and can quit; the waited write is never abandoned while
-the session keeps running.
+**Boundaries:** `k = 0` is not a retry (the first attempt has no delay).
+Retries never stop on their own: the player is shown the failure and can
+quit; the waited write is never abandoned while the session keeps running.
 **Example:** a run-end write fails three times (a cloud-sync tool holding the
 file): waits of 1, 2 and 4 s, then the fourth try succeeds about 7 s plus write
 time later.
@@ -430,7 +546,7 @@ When true, the note is requested and `last_note_ms = play_time_ms`.
 |----------|------|-------|--------|-------------|
 | play_time_ms | double | 0 upward | calculated (F2) | Current clock |
 | last_note_ms | double | 0 upward | calculated | Clock when the last note was requested; set to the loaded clock at start-up |
-| note_interval_s | float | Save & Load's range (about 30 s) | data file (`tuning.save_and_load`) | Play time between notes |
+| note_interval_s | double | Save & Load's range (about 30 s; this document assumes a minimum of 5 s, so at most one note per 150 ticks) | data file (`tuning.save_and_load`) | Play time between notes |
 
 **Output Range:** one note request per `note_interval_s` of play; with ticks
 of 1/30 s, a note is at most one tick late.
@@ -448,8 +564,8 @@ The `show_saving` formula is defined as:
 **Variables:**
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| waited_write_pending | bool | — | calculated | A load, marker, run-end or abandoned-run write has not returned |
-| now_s, pending_since_s | float | — | calculated | Real time now and when the write started (real time, since the clock is held) |
+| waited_write_pending | bool | — | calculated | A load, marker, run-end or abandoned-run write, or its retry sequence, is not finished: it stays true through retry delays, so the indicator does not flicker off between attempts |
+| now_s, pending_since_s | double | — | calculated | Real time now and when the first attempt started (real time, since the clock is held) |
 | saving_indicator_delay_s | float | 0–1 | data file | Delay before the indicator appears |
 
 **Output Range:** true or false.
@@ -457,7 +573,9 @@ The `show_saving` formula is defined as:
 writes; delay 1 leaves a second with no feedback. Default 0.3 s: a typical
 write never shows it, a slow one shows it before the player wonders.
 **Example:** a run-end write that takes 0.12 s shows nothing; one that takes
-2 s shows "Saving…" from 0.3 s to 2 s.
+2 s shows "Saving…" from 0.3 s to 2 s. A request made inside the first 0.3 s
+is refused with "Saving" (R5) but the refusal is not shown either, so the
+player never sees "Saving…" before the indicator.
 
 ## Edge Cases
 
@@ -479,9 +597,15 @@ write never shows it, a slow one shows it before the player wonders.
   button): each gets its own refusal; Presentation shows the reason once
   rather than once per refusal (UI Requirements).
 - **If an owning system's `Try…` throws an error**: the request is refused
-  with a generic reason, the error is logged with the request, the model is
+  with **Internal error**, the error is logged with the request, the model is
   not changed, and the session keeps running. In development builds the error
   is also shown on screen.
+- **If a client resends a request, or one arrives out of order**: a sequence
+  number not above the last one handled for that player is refused as
+  **Duplicate** and logged; nothing is applied twice.
+- **If a request arrives while paused or saving and no tick runs that
+  frame**: it is still handled that frame and refused at once (R4); it does
+  not wait for the next tick.
 
 **Time and pause**
 
@@ -496,29 +620,49 @@ write never shows it, a slow one shows it before the player wonders.
 - **If the player pauses during a waited write**: the write continues (it is on
   the writer); when it returns, the session moves on (for example to In Run)
   but stays paused.
-- **If a storm falls due at the exact tick the player launches a run**: the
-  tick runs `AdvanceTo` before requests for the next tick are taken, so the
-  storm resolves (and saves) at home first; the launch request is handled on
-  the following tick. A storm can never fall into the gap between home and run.
+- **If a storm falls due in the same frame the player launches a run**:
+  requests are handled before that frame's ticks (R4), so the launch is
+  accepted first and the session enters Launching Run, where no tick runs.
+  The storm is then resolved by `AdvanceTo` at the end of the run, before the
+  haul is placed (R12), with the result the forecast promised. A storm can
+  never fall into the gap between home and run unaccounted for.
+- **If a storm fell due while the game was closed**: `AdvanceTo` runs once on
+  entering At Home, before any request (R7), so nothing can be carried out of
+  the home ahead of it.
+- **If the player is in the middle of fast actions when a pause starts**:
+  paused, requests are refused with "Paused"; but the player is in the pause
+  menu then, so they rarely see it.
+- **If a stash or other home object is driven by engine physics or
+  animation**: rules never read it (R9); a paused frame shows the world as it
+  stood.
 - **If a storm fell due during a pause**: impossible; the clock does not move
   while paused.
 
 **Saving**
 
-- **If a home save fails** (disk full, file held by another program): the
-  player is told once, play continues, and the next save point tries again with
-  the whole model, so nothing is lost unless the game also crashes before a
-  save succeeds.
+- **If a home save fails** (disk full, file held by another program): play
+  continues, the "Unsaved changes" mark stays on screen until a save
+  succeeds, and the next save point tries again with the whole model, so
+  nothing is lost unless the game also crashes before a save succeeds. After
+  `home_save_fail_block_count` failures in a row the blocking notice appears
+  (R10), so a player cannot build for an hour on a full disk without knowing.
 - **If the run-marker write fails or times out**: the launch is cancelled and
   the player stays home (R12); a late arrival of the timed-out write on disk is
   followed by the marker-free write, because the queue writes in order
   (ADR-0003).
 - **If the run-end write keeps failing**: the session stays in Ending Run,
-  retrying (F3), showing the failure and offering Quit. If the player quits, the
-  marker is still on disk; the next start resolves it as an abandoned run and
-  the haul is lost. This fails closed: nothing can be duplicated, and it is the
-  only way a successful extraction can still be lost, which is accepted as a
-  rare failure of the player's disk, not a game rule.
+  retrying (F3), showing the failure and offering Quit, labelled "Quitting now
+  loses this haul". If the player quits, the marker is still on disk; the next
+  start resolves it as an abandoned run and the haul is lost. This fails
+  closed: nothing can be duplicated, and it is the only way a successful
+  extraction can still be lost, which is accepted as a rare failure of the
+  player's disk, disclosed before the player chooses (Player Fantasy). A local
+  fallback write that would let the next start honour the extraction is an
+  open question (Open Questions 6).
+- **If the run or home scene fails to load**: a run scene that fails after
+  the marker write cancels the launch like a failed marker write (R12); a home
+  scene that fails after the run-end write is retried in Ending Run, since
+  the result is already on disk.
 - **If the game is killed during Ending Run before the write lands**: same
   outcome as above, by ADR-0002's marker rule.
 - **If the load result is "loaded from a backup"**: the player is told which
@@ -545,8 +689,10 @@ write never shows it, a slow one shows it before the player wonders.
 
 - **Pausing to scout or to escape a creature**: pause freezes the whole
   Simulation and hides nothing new (the game keeps showing the frozen view), so
-  it buys thinking time, not information or safety. Accepted: solo only, and
-  Pillar 2 favours the player having time to read danger.
+  it buys thinking time, not information or safety. Rapid pause and unpause
+  lets a player study a creature's wind-up frame by frame. Accepted as an
+  accessibility trade-off: solo only, and Pillar 2 favours the player having
+  time to read danger.
 - **Quitting during a run to keep the haul**: impossible; the marker makes a
   quit a death (ADR-0002).
 - **Killing the game during Ending Run to reroll storms**: storms are a pure
@@ -571,7 +717,9 @@ added here (see Open Questions).
 
 | System | Hard / soft | What it needs from this system | Design doc |
 |---|---|---|---|
-| Player Controller (6) | Hard | Session state, pause and saving freezes; the host's trust of its position | Not written |
+| Input (3) | Soft | Session state (to choose its Frozen context), pause and quit | [input.md](input.md) (in review) |
+| Ore & Item Economy (4) | Hard, Authority side only | Container operations run only inside an accepted request; its refusal reasons are returned as the owning system's | [ore-and-item-economy.md](ore-and-item-economy.md) (in review) |
+| Player Controller (6) | Hard | Session state, the published frozen flag (pause and saving), the host's trust of its position; new tuning values when the catalog revision changes | Not written |
 | Save & Load (7) | Hard | Its only caller; the load at start-up and every save point | Not written |
 | Pack (8) | Hard | Requests (pick up, drop) and published pack state | Not written |
 | Health & Damage (17) | Hard | Tick and host-only damage | Not written |
@@ -590,25 +738,26 @@ downstream system.
 `tuning.session_and_authority`, in Game Data & Tuning's record shape. All are
 `provisional: true` until the first gameplay story measures them.
 
-| Key | Type | Value | Min | Max | Step | Unit | Too low | Too high | Rationale |
-|---|---|---|---|---|---|---|---|---|---|
-| `tick_rate_hz` | int | 30 | 20 | 60 | 1 | count | Coarse timing: a 0.55 s creature wind-up lands on 16 or 17 ticks; drill and oxygen steps feel lumpy | More CPU per second for the same game; little gain for a slow-paced game | Half the target frame rate; fine enough for the prototype's shortest timings (0.45 s stun drill) |
-| `max_ticks_per_frame` | int | 8 | 1 | 10 | 1 | count | The game slows down below `tick_rate_hz` frames per second | Long catch-up bursts after a stall; can make a slow frame slower | 8 ticks at 30 Hz is 0.267 s, just over `max_frame_dt_s`, so a counted frame never loses time |
-| `max_frame_dt_s` | float | 0.25 | 0.05 | 1 | 0.05 | s | Ordinary slow frames lose time | A stall turns into a burst of ticks | A quarter second: anything longer is a stall, not play |
-| `waited_write_timeout_s` | float | 10 | 3 | 30 | 1 | s | A slow disk fails launches and run ends that would have succeeded | The player watches "Saving…" for a long time before being told | Long enough for a slow disk and a cloud-sync tool; ADR-0003 requires a time limit |
-| `retry_base_s` | float | 1 | 0.25 | 5 | 0.25 | s | Retries hammer a disk that is busy | The player waits after a brief glitch | F3 |
-| `retry_cap_s` | float | 8 | 2 | 60 | 1 | s | Retries too frequent while a file stays held | The player waits long after the problem clears | F3; 8 s keeps the next try within a short wait |
-| `saving_indicator_delay_s` | float | 0.3 | 0 | 1 | 0.05 | s | Flicker on fast writes | No feedback during a slow write | F5 |
-| `quit_drain_timeout_s` | float | 3 | 1 | 10 | 0.5 | s | A pending home save may not finish on quit (allowed: correctness does not depend on it) | Quitting feels stuck | ADR-0003: drain within a bounded wait |
+| Key | Type | Value | Min | Max | Step | Unit | Apply | Too low | Too high | Rationale |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `tick_rate_hz` | int | 30 | 20 | 60 | 1 | `hz` | `restart` | Coarse timing: a 0.55 s creature wind-up lands on 16 or 17 ticks; drill and oxygen steps feel lumpy | More CPU per second for the same game; little gain for a slow-paced game | Half the target frame rate; fine enough for the prototype's shortest timings (0.45 s stun drill). `restart`: a live change would reinterpret every tick-counted timer mid-run |
+| `max_frame_dt_s` | float | 0.25 | 0.05 | 1 | 0.05 | `s` | `live` | Ordinary slow frames lose time | A stall turns into a burst of ticks | A quarter second: anything longer is a stall, not play. The tick cap is derived from it (F1) |
+| `waited_write_timeout_s` | float | 10 | 3 | 30 | 1 | `s` | `live` | A slow disk fails launches and run ends that would have succeeded | The player watches "Saving…" for a long time before being told | Long enough for a slow disk and a cloud-sync tool; ADR-0003 requires a time limit |
+| `retry_base_s` | float | 1 | 0.25 | 5 | 0.25 | `s` | `live` | Retries hammer a disk that is busy | The player waits after a brief glitch | F3 |
+| `retry_cap_s` | float | 8 | 5 | 60 | 1 | `s` | `live` | Retries too frequent while a file stays held | The player waits long after the problem clears | F3; 8 s keeps the next try within a short wait |
+| `saving_indicator_delay_s` | float | 0.3 | 0 | 1 | 0.05 | `s` | `live` | Flicker on fast writes | No feedback during a slow write | F5 |
+| `quit_drain_timeout_s` | float | 3 | 1 | 10 | 0.5 | `s` | `live` | A pending home save may not finish on quit (allowed: correctness does not depend on it) | Quitting feels stuck | ADR-0003: drain within a bounded wait |
+| `home_save_fail_block_count` | int | 3 | 1 | 20 | 1 | `count` | `live` | A single glitch interrupts play | A player builds a long time on a disk that is not saving | Three failed save points in a row is a pattern, not a glitch (R10) |
+
+Constraint: `retry_base_s ≤ retry_cap_s` (also guaranteed by the ranges).
+Owner: Session & Authority. The unit `hz` (whole ticks per second, `int`,
+min > 0) is added to Game Data & Tuning's R5 table in its revision 2.
+`max_ticks_per_frame` is no longer a knob: F1 derives it, so no legal
+combination of knobs can make a counted frame lose time.
 
 Not knobs here: the play-time note interval is Save & Load's
 (`tuning.save_and_load`); the auto-pause-on-focus-loss switch is a player
-setting owned by Menus & Settings (default on), not tuning. **Interaction:**
-`max_ticks_per_frame × (1 / tick_rate_hz)` should be at least
-`max_frame_dt_s` (5 × 1/30 ≈ 0.167 s < 0.25 s at the defaults), or a counted
-frame can still lose time. At the defaults 8 × 1/30 ≈ 0.267 s ≥ 0.25 s, so it
-holds; raising `max_frame_dt_s` or lowering `tick_rate_hz` needs
-`max_ticks_per_frame` checked again.
+setting owned by Menus & Settings (default on), not tuning.
 
 ## Visual/Audio Requirements
 
@@ -636,15 +785,20 @@ nothing else owns them:
 
 This system raises; the HUD systems show. Required surfaces:
 
-1. **Refusal feedback.** Every refused request reaches the player as a short
-   reason near the action (the owning system's reason, or a session reason:
-   "Paused", "Saving…", "Can't do that here"). Repeats of the same refusal
-   within a second show once.
+1. **Refusal feedback.** A refused request reaches the player as a short
+   reason near the action when the reason is one they can act on: the owning
+   system's reason, "Saving…" (only once the indicator shows, F5) and "Can't
+   do that here" (Wrong place). Not now, Paused, Unknown player, Malformed,
+   Duplicate and Internal error are logged, not shown (development builds show
+   Internal error on screen). Repeats of the same refusal within a second show
+   once.
 2. **"Saving…" indicator** during waited writes (F5), at home and on the
    run-start and run-end transitions.
-3. **Failed save notices.** Home save failed (non-blocking, once, "will retry
-   on your next action"); waited write failing (blocking, with retry count and a
-   Quit option).
+3. **Failed save notices.** Home save failing: a persistent "Unsaved changes"
+   mark until a save succeeds, and a blocking notice with Retry and Quit after
+   `home_save_fail_block_count` failures in a row. Waited write failing:
+   blocking, with retry count and a Quit option; during run end the Quit
+   option reads "Quitting now loses this haul".
 4. **Abandoned-run notice** at home after Resolving: the run ended when the
    game closed; the items carried are listed as lost; any storms that passed are
    summarised (from the `StormReport`s).
@@ -654,6 +808,8 @@ This system raises; the HUD systems show. Required surfaces:
    of Star Haul"), locked ("Star Haul is already running"), unreadable with no
    backup. Each says the save was not changed.
 7. **Pause menu hook** and the auto-pause setting (owned by Menus & Settings).
+8. **First-run tip** that an unfinished run is an unbanked run: quitting or
+   a crash during a run loses what is carried (owned by First-Run Guidance).
 
 > **📌 UX Flag — Session & Authority**: items 1 to 6 are player-facing. When
 > `/ux-design` runs for Home HUD & Panels, Run HUD and Menus & Settings, include
@@ -673,128 +829,233 @@ This system raises; the HUD systems show. Required surfaces:
 ## Acceptance Criteria
 
 **Type**: *Logic* criteria need an automated EditMode test under
-`StarHaul/Assets/Tests/EditMode/` with no scene and no Netcode where possible;
-*Integration* criteria need an automated test or a documented check (PlayMode
-or a two-instance smoke test); *UI* criteria need a retained screenshot in
-`production/qa/evidence/`. QA lens: every rule R1 to R14 and formula F1 to F5
-has at least one criterion below; R8's replication method and R12's scene
-change are deferred by ADR-0001 and get criteria in their amendment's stories.
+`StarHaul/Assets/Tests/EditMode/` with no scene and no Netcode, written against
+fakes of the owning systems' `Try…` methods, `IHomeSimulation`, `ISaveQueue`
+and an injected real-time clock, so they do not wait on undesigned systems;
+*Integration* criteria need an automated PlayMode test or a documented check;
+*UI* criteria need a retained screenshot in `production/qa/evidence/`, one
+per message named. Each criterion names its milestone: **[A]** testable in
+Milestone A (the valley, no runs), **[B]** from Milestone B (runs). Criteria
+marked **(provisional on X)** cannot be finished until X's design doc or ADR
+exists. R8's replication method and R12's scene-change mechanism are deferred
+by ADR-0001 and get criteria in their amendment's stories. The traceability
+table at the end maps every rule, formula and state to its criteria.
 
 **Session and start-up**
 
-1. **GIVEN** a fresh install with no save, **WHEN** the player presses Play,
-   **THEN** they reach the valley with no network or firewall dialog, the log
-   shows catalog Ready → Starting → Loading (result: new) → At Home in that
-   order, and start-up time differs from a build with the session stubbed out
-   by under 0.1 s, averaged over five starts. *(Integration; R1, States,
-   Game Feel)*
-2. **GIVEN** a save with a later play-time note, **WHEN** loaded, **THEN** the
-   session clock equals the note's clock; **GIVEN** an older note, **THEN** the
-   save's clock. *(Logic; start-up order)*
-3. **GIVEN** a save holding a run marker, **WHEN** the game starts, **THEN**
-   the session passes through Resolving, `AdvanceTo` is called exactly once, the
-   carried items are gone, the marker is cleared in one waited write, and the
-   abandoned-run notice lists the lost items. *(Logic + UI; States, R12)*
-4. **GIVEN** a save with a format version newer than the game, a locked save
-   folder, or an unreadable save with no backup, **WHEN** the player presses
-   Play, **THEN** the session enters Refused with the matching message and the
-   save file's bytes are unchanged. *(Integration + UI; States)*
-5. **GIVEN** a solo session, **WHEN** inspected, **THEN** the player's
-   `playerId` equals the profile's player id and no rule or saved field holds a
-   network client id. *(Logic; R2)*
+1. **GIVEN** a fresh install with no save, in a standalone Windows build run
+   by a user with no firewall rule for the game, **WHEN** the player presses
+   Play, **THEN** the log shows catalog Ready → Starting → Loading (result:
+   new) → At Home in that order; the median of 5 starts from Play to At Home
+   is at most 2 s on the development PC; and a screenshot taken during start
+   shows no network or firewall dialog. *(Integration + UI; [A]; R1, States,
+   Game Feel; provisional on ADR-0001 Verification 1 for the transport)*
+2. **GIVEN** a fake `ISaveQueue` whose load returns a save clock of 600,000 ms
+   and a note clock of 630,000 ms, **WHEN** loaded, **THEN** the session clock
+   and `last_note_ms` are 630,000; **GIVEN** a note clock of 590,000, **THEN**
+   600,000. *(Logic; [A]; start-up order, F4)*
+3. **GIVEN** a fake load result holding a run marker, **WHEN** the game
+   starts, **THEN** the session passes through Resolving, `AdvanceTo` is called
+   exactly once there, the carried items are gone, the marker is cleared in
+   one waited write, and the abandoned-run notice event lists the lost items.
+   *(Logic; [B]; States, R12)*
+4. **GIVEN** that abandoned-run notice, **THEN** a screenshot shows the lost
+   items and any storms passed. *(UI; [B]; UI Requirements 4)*
+5. **GIVEN** a save with a format version newer than the game, a save locked
+   by another running copy, or an unreadable save with no backup, **WHEN** the
+   player presses Play, **THEN** the session enters Refused from Loading with
+   the matching message, the save file's bytes are unchanged, and acknowledging
+   returns to Off; three screenshots show the three messages. *(Integration +
+   UI; [A]; States, UI Requirements 6; provisional on Save & Load for the
+   lock)*
+6. **GIVEN** a solo session whose network client id is 0 and whose profile
+   player id is `P-7`, **WHEN** a snapshot is serialised, **THEN** the
+   session's `playerId` is `P-7` and no field of the snapshot holds the client
+   id. *(Logic; [A]; R2)*
+7. **GIVEN** a Milestone A build, **WHEN** it is started and quit, **THEN** the
+   log shows exactly Off → Starting → Loading → At Home → Stopping → Off, and
+   a launch-run request is refused as Malformed. *(Logic; [A]; R14)*
 
 **Requests**
 
-6. **GIVEN** At Home with enough sticks, **WHEN** a place-piece request is
-   sent, **THEN** exactly one accepted result with the request's sequence
-   number arrives, the model's revision rises by one, the change list names the
-   new piece, and one snapshot is handed to the queue. *(Logic; R3, R4, R10)*
-7. **GIVEN** two requests in one tick that each move the last ore into the
-   stash, **WHEN** handled, **THEN** the first is accepted, the second refused
-   by the owning rule, and the ore exists exactly once. *(Logic; R4, Edge
-   Cases)*
-8. **GIVEN** each cell of R5's table, **WHEN** a request of that intent class
-   arrives in that state, **THEN** it is accepted for checking or refused with
-   exactly the reason in the table. *(Logic; R5, one test per cell)*
-9. **GIVEN** a request whose arguments name an unknown catalog id, or a player
-   id not in the session, **WHEN** handled, **THEN** it is refused as Malformed
-   or Unknown player and the tick completes. *(Logic; R5)*
-10. **GIVEN** an owning system that throws inside `Try…`, **WHEN** a request
-    reaches it, **THEN** the request is refused, the model's revision is
-    unchanged, the error is logged, and the next tick runs. *(Logic; Edge
-    Cases)*
-11. **GIVEN** the solo session, **WHEN** a request is sent, **THEN** it goes
-    through the same request method an RPC from a remote client would call
-    (no solo-only path), verified by a test that sends the same request both
-    ways and gets the same result. *(Integration; R1)*
+8. **GIVEN** At Home and a fake Building whose `TryPlace` accepts, **WHEN** a
+   place-piece request is sent, **THEN** exactly one accepted result with the
+   request's sequence number arrives, the model revision rises by one, the
+   change list carries that revision and names the new piece, and one
+   snapshot is handed to the queue at the end of the frame. *(Logic; [A]; R3,
+   R4, R10)*
+9. **GIVEN** two requests in one frame that each move the last ore into the
+   stash, and a fake Stash that counts, **WHEN** handled, **THEN** the first is
+   accepted, the second refused by the owning rule, and the ore exists exactly
+   once. *(Logic; [A]; R4, Edge Cases)*
+10. **GIVEN** each cell of R5's table (every intent class in every state, with
+    and without paused, and At Home with a waited write pending), **WHEN** a
+    request of that class arrives, **THEN** it is accepted for checking, queued
+    or refused with exactly the reason in the cell, Saving taking precedence
+    over Paused. *(Logic; [A] for home and tuning rows, [B] for run rows; R5,
+    one test per cell)*
+11. **GIVEN** a request whose arguments name an unknown catalog id, a player
+    id not in the session, or a sequence number equal to the last handled,
+    **WHEN** handled, **THEN** it is refused as Malformed, Unknown player or
+    Duplicate, nothing changes, and the frame completes. *(Logic; [A]; R3,
+    R5)*
+12. **GIVEN** an owning system that throws inside `Try…`, **WHEN** a request
+    reaches it, **THEN** the request is refused with Internal error, the model
+    revision is unchanged, the error is logged, and the next tick runs.
+    *(Logic; [A]; Edge Cases)*
+13. **GIVEN** the session paused, **WHEN** a home request arrives in a frame
+    with no tick, **THEN** its Paused refusal is sent that same frame. *(Logic;
+    [A]; R4)*
+14. **GIVEN** a refusal for player A in a test harness with two player ids,
+    **THEN** only A receives a result. **GIVEN** a request that is accepted and
+    changes the session state (a launch), **THEN** the rest of that frame's
+    requests see the new state and no tick runs after it that frame.
+    *(Logic; [B]; R4)*
+15. **GIVEN** the solo session, **WHEN** a request is sent, **THEN** it goes
+    through the same enqueue method an RPC from a remote client would call
+    (no solo-only path), verified by sending the same request both ways and
+    getting the same result. *(Integration; [A]; R1)*
+16. **GIVEN** a development build, solo, At Home, **WHEN** a live tuning change
+    and a home request are queued in that order, **THEN** they are handled in
+    that order, the tuning change applies at the next tick (Game Data &
+    Tuning R12), and the home request's result comes in the same frame.
+    *(Logic; [A]; R3, R5)*
 
 **Tick, clock and pause**
 
-12. **GIVEN** 30 Hz and a frame sequence of 0.05, 0.04, 0.05 s from acc 0,
-    **WHEN** F1 runs, **THEN** ticks are 1, 1, 2 and acc ends at 0.00667 (±1e-6).
-    **GIVEN** a 5 s frame, **THEN** 7 ticks run. **GIVEN** 0 s, **THEN** 0.
-    *(Logic; F1)*
-13. **GIVEN** a simulated hour of At Home ticks at 20, 30 and 60 Hz, **WHEN**
-    F2 accumulates, **THEN** the clock grows by 3,600,000 ms (±1 ms) in each
-    case. *(Logic; F2, R7)*
-14. **GIVEN** the session is paused, in the main menu, Loading, Resolving,
-    Launching Run or Ending Run for 60 s, **WHEN** that time passes, **THEN**
-    the clock and every Simulation value (oxygen, creature positions) are
-    unchanged. *(Logic; R6, R7, R9)*
-15. **GIVEN** solo play with auto-pause on, **WHEN** the window loses focus,
-    **THEN** the session is paused within one frame and stays paused after
-    focus returns; **GIVEN** auto-pause off, **THEN** the clock keeps advancing.
-    *(Integration; R9)*
-16. **GIVEN** At Home with a storm due at the current clock, **WHEN** the tick
-    runs, **THEN** `AdvanceTo` resolves it and one snapshot is requested;
-    **GIVEN** In Run, **THEN** `AdvanceTo` is not called but the clock advances.
-    *(Logic; R7)*
-17. **GIVEN** a note interval of 30 s and a last note at 600,000 ms, **WHEN**
-    ticks advance the clock past 630,000 ms, **THEN** exactly one note request
-    is made on the first tick at or after 630,000 ms. *(Logic; F4)*
+17. **GIVEN** 30 Hz, `max_frame_dt_s` 0.25 and a frame sequence of 0.05, 0.04,
+    0.05 s from acc 0, **WHEN** F1 runs, **THEN** ticks are 1, 1, 2 and acc ends
+    at 0.00667 (±1e-6). **GIVEN** a 5 s frame, **THEN** 7 ticks run. **GIVEN** 0
+    s, **THEN** 0. **GIVEN** `max_frame_dt_s` 1 and 60 Hz, **THEN** the derived
+    cap is 60 and a 1 s frame runs 60 ticks with acc in [0, 1/60). *(Logic;
+    [A]; F1)*
+18. **GIVEN** a simulated hour of At Home ticks at 20, 30 and 60 Hz, **WHEN**
+    F2 accumulates in double precision, **THEN** the clock grows by 3,600,000
+    ms (±1 ms) in each case. *(Logic; [A]; F2, R7)*
+19. **GIVEN** each of Starting, Loading, Resolving, Launching Run, Ending Run,
+    Stopping, and At Home paused, **WHEN** 1,800 frames of 1/30 s are fed to
+    F1, **THEN** ticks = 0, the clock is unchanged, the fake Simulation's
+    `Tick` was never called, and the published frozen flag is set. *(Logic;
+    [A], [B] for run states; R3, R6, R7, R9)*
+20. **GIVEN** a paused run with a creature mid-move, **WHEN** 2 s of frames
+    pass, **THEN** the creature's position and the physics bodies the rules
+    read are unchanged (logged positions before and after are equal).
+    *(Integration; [B]; R9)*
+21. **GIVEN** solo play with auto-pause on, **WHEN** the window loses focus (in
+    a player, and in the editor by focusing another editor window), **THEN**
+    the session is paused within one frame and stays paused after focus
+    returns; **GIVEN** auto-pause off, **THEN** the clock keeps advancing.
+    *(Integration; [A]; R9; provisional on Menus & Settings for the setting)*
+22. **GIVEN** a fake session with two player ids, **WHEN** a pause is
+    requested, **THEN** it is refused and auto-pause does nothing. *(Logic;
+    [A]; R9)*
+23. **GIVEN** At Home with a fake Storms that has a storm due at the current
+    clock, **WHEN** the tick runs, **THEN** `AdvanceTo` resolves it and one
+    snapshot is requested; **GIVEN** In Run, **THEN** `AdvanceTo` is not called
+    but the clock advances. **GIVEN** a load whose clock is past a due storm,
+    **THEN** `AdvanceTo` is called on entering At Home before the first request
+    is handled. *(Logic; [A], [B] for the run case; R7)*
+24. **GIVEN** a note interval of 30 s and a last note at 600,000 ms, **WHEN**
+    ticks advance the clock past 630,000 ms, at home and in a run, **THEN**
+    exactly one note request is made on the first tick at or after 630,000 ms.
+    *(Logic; [A], [B] for the run case; F4)*
 
 **Saves and runs**
 
-18. **GIVEN** a launch accepted, **WHEN** the marker write succeeds, **THEN**
-    the session enters In Run; **WHEN** it fails or times out at
-    `waited_write_timeout_s`, **THEN** the marker is removed from the model, a
-    marker-free snapshot is written and waited for, and the session returns to
-    At Home with a message. *(Logic; R12, ADR-0003)*
-19. **GIVEN** In Run with storms due and a haul in the pack, **WHEN** Run Flow
-    raises an extraction, **THEN** the calls happen in the order `AdvanceTo`,
-    haul placement, `EndRun`, one snapshot, one `RequestAndWait`, and the haul is
-    never affected by a storm that fell during the run. *(Logic; R12, plain C#
-    with no Netcode)*
-20. **GIVEN** a run-end write that fails three times then succeeds, **WHEN**
-    retried, **THEN** the delays are 1, 2 and 4 s (±1 frame), home actions are
-    refused with "Saving…" throughout, and the session reaches At Home after
-    the fourth try. *(Logic; F3, R10)*
-21. **GIVEN** a waited write pending for 0.12 s, **THEN** "Saving…" never
-    shows; **GIVEN** 2 s, **THEN** it shows from 0.3 s until the write returns.
-    *(Logic + UI; F5)*
-22. **GIVEN** a home save that fails, **WHEN** the next home action is
-    accepted, **THEN** a new snapshot is requested, the failure notice was shown
-    once, and play never blocked. *(Logic + UI; R10)*
-23. **GIVEN** the player quits from a run and confirms, **WHEN** the game is
+25. **GIVEN** a launch accepted and a fake `ISaveQueue`, **WHEN** the marker
+    write succeeds, **THEN** the session stays in Launching Run until the fake
+    scene loader reports complete, then enters In Run; **WHEN** it fails or
+    times out at `waited_write_timeout_s`, or the scene load fails, **THEN** the
+    marker is removed from the model, a marker-free snapshot is written and
+    waited for, and the session returns to At Home with a message naming the
+    failure; **WHEN** that marker-free write also fails, **THEN** the session is
+    At Home with a waited write pending, home actions are refused with Saving,
+    and retries start again at k = 1. *(Logic; [B]; R12, ADR-0003)*
+26. **GIVEN** In Run with a fake Storms holding due storms and a haul in the
+    pack, **WHEN** Run Flow raises an extraction, **THEN** the calls happen in
+    the order `AdvanceTo`, haul placement, `EndRun`, one snapshot, one
+    `RequestAndWait`, home scene load, and the haul is never affected by a
+    storm that fell during the run; **GIVEN** a death, **THEN** the same order
+    with no haul placement. *(Logic; [B]; R12, plain C# with no Netcode;
+    provisional on Run Flow for the outcome event)*
+27. **GIVEN** an injected clock, `retry_base_s` 1 and `retry_cap_s` 8, and a
+    run-end write that fails five times then succeeds, **WHEN** retried,
+    **THEN** the delays are exactly 1, 2, 4, 8 and 8 s, home actions are refused
+    with Saving throughout, "Saving…" shows continuously from 0.3 s, and the
+    session reaches At Home after the sixth try. *(Logic; [B]; F3, F5, R10)*
+28. **GIVEN** an injected clock, **WHEN** a waited write is pending for 0.12 s,
+    **THEN** "Saving…" never shows; at exactly 0.3 s, **THEN** it shows; for
+    2 s, **THEN** it shows from 0.3 s until the write returns. *(Logic; [A];
+    F5)*
+29. **GIVEN** a slow waited write, **THEN** a screenshot shows the "Saving…"
+    indicator. *(UI; [A]; UI Requirements 2)*
+30. **GIVEN** a fake queue whose home saves fail, **WHEN** home actions are
+    accepted, **THEN** each next frame with a change requests a new snapshot,
+    the next request is accepted in the same frame (play never blocks), the
+    "Unsaved changes" mark is on from the first failure until a save succeeds,
+    and the blocking notice appears exactly at the third failure in a row
+    (`home_save_fail_block_count` 3). *(Logic; [A]; R10)*
+31. **GIVEN** those states, **THEN** screenshots show the "Unsaved changes"
+    mark and the blocking notice. *(UI; [A]; UI Requirements 3)*
+32. **GIVEN** the player quits from a run and confirms, **WHEN** the game is
     started again, **THEN** the run is resolved as abandoned (carried items
-    lost). **GIVEN** an orderly quit at home with a pending snapshot, **THEN**
-    the snapshot and a final note are written within `quit_drain_timeout_s` and
-    no new snapshot is taken. *(Integration; R13)*
-24. **GIVEN** Run Flow raises the end of a run twice, **WHEN** the second
-    arrives during Ending Run, **THEN** it is ignored and logged, and only one
-    sequence and one write happen. *(Logic; Edge Cases)*
+    lost). *(Integration; [B]; R13)*
+33. **GIVEN** an orderly quit at home with a pending snapshot, **THEN** the
+    snapshot and a final note are written within `quit_drain_timeout_s` and no
+    new snapshot is taken; **GIVEN** a fake writer that never returns, **THEN**
+    Stopping reaches Off at `quit_drain_timeout_s`. *(Logic; [A]; R13)*
+34. **GIVEN** each of Starting, Loading, Resolving, Launching Run and Ending
+    Run, **WHEN** a quit is requested, **THEN** the session reaches Stopping by
+    the transition in the table (after the step in progress for the first
+    three); **AND** a test that drives every event in every state finds no
+    transition outside the table. *(Logic; [A] for the first three, [B] for
+    the rest; States, R13)*
+35. **GIVEN** a standalone player, **WHEN** the window is closed during a run,
+    **THEN** the quit-during-run confirmation appears, and on confirming the
+    drain runs and the application exits. *(Integration + UI; [B]; R13, UI
+    Requirements 5)*
+36. **GIVEN** Run Flow raises the end of a run twice, **WHEN** the second
+    arrives during Ending Run or At Home, **THEN** it is ignored and logged,
+    and only one sequence and one write happen. *(Logic; [B]; Edge Cases)*
+37. **GIVEN** a run-end write that keeps failing, **THEN** a screenshot shows
+    the failure notice with the Quit option labelled "Quitting now loses this
+    haul". *(UI; [B]; UI Requirements 3, Player Fantasy)*
 
 **Cross-system**
 
-25. **GIVEN** a test catalog where `tuning.session_and_authority` sets
-    `tick_rate_hz` to 20, **WHEN** a session is built, **THEN** F1 runs at 20 Hz
-    and each Simulation system received only its own tuning set (Game Data &
-    Tuning R10). *(Logic; R11)*
-26. **GIVEN** two local instances (host and one client) using the real
+38. **GIVEN** a test catalog where `tuning.session_and_authority` sets
+    `tick_rate_hz` to 20, **WHEN** a session is built, **THEN** F1 runs at 20 Hz,
+    each Simulation system received only its own tuning set (Game Data &
+    Tuning R10), and the home façade and world-query implementation were
+    built. *(Logic; [A]; R11)*
+39. **GIVEN** two local instances wired together by a development-only test
+    harness (a host and one client given a test player id), using the real
     transport, **WHEN** the client places a piece, **THEN** the host validates
-    it and both instances show the same piece at the same revision. *(Integration;
-    two-instance smoke test, ADR-0001 Validation; MVP definition of done even
-    though co-op does not ship)*
+    it and both instances show the same piece at the same model revision.
+    *(Integration; [A]; the ADR-0001 validation spike, not a co-op feature;
+    provisional on ADR-0001 Verification and the co-op ADR's guest-id rule)*
+
+**Traceability**
+
+| Rule, formula or state | Criteria |
+|---|---|
+| R1 One host, no offline path | 1, 15, 39 |
+| R2 Player identity | 6 |
+| R3 Requests, sequence numbers, frozen flag | 8, 11, 16, 19 |
+| R4 Handling, per-frame drain, revision streams | 8, 9, 13, 14 |
+| R5 Session check | 10, 11, 16 |
+| R6 Fixed tick | 17, 19 |
+| R7 Play-time clock, `AdvanceTo` | 18, 23 |
+| R8 Publishing | 8 (change list and revision); replication in the ADR-0001 amendment |
+| R9 Pause | 19, 20, 21, 22 |
+| R10 Save points, waited writes, failed saves | 8, 27, 28, 30 |
+| R11 Building the Simulation | 38 |
+| R12 Runs | 3, 25, 26, 37 |
+| R13 Quitting | 32, 33, 34, 35 |
+| R14 Milestone A | 7 |
+| F1, F2, F3, F4, F5 | 17; 18; 27; 2, 24; 27, 28 |
+| States and transitions | 3, 5, 7, 25, 26, 34 |
+| UI Requirements 1 to 6 | 10 (reasons shown or logged), 29, 31 and 37, 4, 35, 5. Items 7 and 8 belong to Menus & Settings and First-Run Guidance |
 
 ## Open Questions
 
@@ -805,6 +1066,9 @@ change are deferred by ADR-0001 and get criteria in their amendment's stories.
 | 3 | Storms' open question "does solo play pause when the window loses focus?": this document provides auto-pause (default on) as an explicit pause. The Storms design doc should confirm or change the default | Storms design doc | When Storms is designed |
 | 4 | Whether a co-op host may pause, and what guests see; join and leave rules; whose home it is | Co-op ADR | Before Tier 2a |
 | 5 | A deliberate "Abandon run" option (end a run as a death without quitting the game) belongs to Run Flow; if added, it goes through Run Flow's end-of-run event, not a session shortcut | Run Flow design doc | Milestone B |
+| 6 | **Local fallback for a failing run-end write.** Writing the extraction result beside the marker, so the next start can honour a finished extraction after the player quits during retries, would remove the one way a successful extraction can be lost. Needs an ADR-0003 amendment | technical-director | Vertical Slice |
+| 7 | **Request rate and held actions.** Held actions such as drilling should be begin and end intents, not one request per tick, and a per-player cap on requests per frame (with rate-limited logging of Unknown player and Internal error) is needed before co-op. A range-check tolerance for remote players' delayed positions and a speed plausibility check also belong here | network-programmer, with the Mining design doc | Before Tier 2a; begin and end intents with Mining |
+| 8 | **Auto-unpause after a focus return** (a countdown, as a setting) | Menus & Settings | After the MVP |
 
 ### Decisions taken on the designer's behalf (2026-11-27, autonomous mode)
 
@@ -822,3 +1086,28 @@ Logged in `production/session-logs/decision-log.md`; each can be reversed:
    next start resolves it as abandoned (R13).
 7. Default timings: waited-write time limit 10 s, retries 1 s doubling to 8 s,
    "Saving…" after 0.3 s, quit drain 3 s (Tuning Knobs).
+
+Added in revision 1 (2026-11-28), from the creative-director's rulings in the
+first `/design-review`; also logged in the decision log:
+
+8. Requests are **drained every frame**, whether or not a tick runs, so
+   refusals while paused or saving reach the player at once; network handlers
+   only enqueue (R4).
+9. Live tuning changes and joins share the **one request queue** (R3, R5).
+10. Per-player **sequence numbers** and a Duplicate refusal (R3); two named
+    revision streams, model and catalog (R4).
+11. The **transition table is closed**: quit from every state with a session,
+    quit to the desktop through the same path, and Launching Run and Ending
+    Run hold until the scene load completes (R12, R13, States).
+12. **Pause stops everything that rules read**; Presentation may use a time
+    scale of 0 (R9).
+13. **"Unsaved changes"** stays on screen while home saves fail, and a
+    blocking notice follows after 3 failures in a row (R10).
+14. When the run-end write fails, Quit is labelled **"Quitting now loses this
+    haul"**; no ADR-0003 amendment now (Open Questions 6). Crash = death stays
+    (ADR-0002), worded "an unfinished run is an unbanked run" and disclosed in
+    a first-run tip (Player Fantasy).
+15. `max_ticks_per_frame` is **derived**, not tuned (F1); every knob has an
+    `apply` mode; `tick_rate_hz` is `restart` and uses a new unit `hz`.
+16. Only reasons a player can act on are shown; the rest are logged (UI
+    Requirements). Pause buffering is accepted as an accessibility trade-off.

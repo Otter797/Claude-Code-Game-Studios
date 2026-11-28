@@ -64,7 +64,7 @@ valley home); 16 to 24 are Milestone B (the asteroid run).
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
 | 1 | Game Data & Tuning (inferred) | Core | MVP | In Review | [game-data-and-tuning.md](game-data-and-tuning.md) | — |
-| 2 | Session & Authority | Core | MVP | Designed | [session-and-authority.md](session-and-authority.md) | — |
+| 2 | Session & Authority | Core | MVP | In Review | [session-and-authority.md](session-and-authority.md) | — |
 | 3 | Input (inferred) | Core | MVP | Designed | [input.md](input.md) | — |
 | 4 | Ore & Item Economy (inferred) | Economy | MVP | Needs Revision | [ore-and-item-economy.md](ore-and-item-economy.md) | Game Data & Tuning |
 | 5 | Home Valley | Gameplay | MVP | Designed | [home-valley.md](home-valley.md) | Game Data & Tuning |
