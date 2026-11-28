@@ -344,9 +344,9 @@ formulas:
       - move
     output_range: [0, 12]
     expression: "(sprinting ? sprint_speed : walk_speed) * (1 - full_pack_slow * fill) * |move|"
-    notes: "F1. full_pack_slow and fill are Pack's. MVP: empty walk 3.8, empty sprint 6.2, full walk 2.47, full sprint 4.03 m/s. Creature AI's burrower_speed 4.4 sits between, by design."
+    notes: "F1. full_pack_slow and fill are Pack's; fill is 0 at home (slow on a run only). MVP with Pack's full_pack_slow 0.5: empty walk 3.8, empty sprint 6.2, full walk 1.9, full sprint 3.1 m/s. Escape targets (R5) need full_pack_slow >= 0.492 with burrower_speed 4.4 (full pack caught from 10 m in 7.7 s)."
     added: 2026-11-28
-    revised: ""
+    revised: 2026-11-28
   - name: loaded_clock
     status: active
     source: design/gdd/save-and-load.md
@@ -447,20 +447,20 @@ constants:
       - design/gdd/player-controller.md
       - design/gdd/home-valley.md
     value: 3.8
-    unit: m/s
-    notes: "tuning.player_controller; range 2 to 8; must stay at or below sprint_speed and below Creature AI's burrower_speed (4.4) by design intent"
+    unit: m_per_s
+    notes: "tuning.player_controller; range 2 to 8; must stay at or below sprint_speed and below Creature AI's burrower_speed (4.4) by design intent; unslowed at home (the pack slow applies on a run only)"
     added: 2026-11-28
-    revised: ""
+    revised: 2026-11-28
   - name: sprint_speed
     status: active
     source: design/gdd/player-controller.md
     referenced_by:
       - design/gdd/player-controller.md
     value: 6.2
-    unit: m/s
-    notes: "tuning.player_controller; range 3 to 12; forward only; above burrower_speed empty, below it with a nearly full pack (crossover about 13 of 16 slots)"
+    unit: m_per_s
+    notes: "tuning.player_controller; range 3 to 12; forward part at least sprint_min_forward 0.7; escape targets (R5): empty pack gains 10 m on a burrower in <= 6 s, full pack caught from 10 m in <= 8 s (needs Pack's full_pack_slow >= 0.492)"
     added: 2026-11-28
-    revised: ""
+    revised: 2026-11-28
   - name: step_offset
     status: active
     source: design/gdd/player-controller.md
@@ -471,17 +471,17 @@ constants:
     notes: "tuning.player_controller; Building must keep walkable piece edges at or below it or provide stairs"
     added: 2026-11-28
     revised: ""
-  - name: slope_limit_deg
+  - name: slope_limit_rad
     status: active
     source: design/gdd/player-controller.md
     referenced_by:
       - design/gdd/player-controller.md
       - design/gdd/home-valley.md
-    value: 45
-    unit: degrees
-    notes: "tuning.player_controller; Home Valley's rim and Asteroid World's walls must be steeper"
+    value: 0.785
+    unit: rad
+    notes: "tuning.player_controller; 45 degrees, stored in rad (Game Data & Tuning R5 has no degrees; was slope_limit_deg 45); Home Valley's rim and Asteroid World's walls must be steeper"
     added: 2026-11-28
-    revised: ""
+    revised: 2026-11-28
 
 # Example:
 #
