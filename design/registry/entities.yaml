@@ -54,7 +54,7 @@
 #   in any other shape is reported as unsupported layout, with its number.
 
 version: 1
-last_updated: ""
+last_updated: "2026-11-28"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -94,7 +94,153 @@ entities: []
 # Attribute fields: value_gold, weight, stackable, category, and any stat
 #   modifiers that another system (e.g., economy, crafting) might reference.
 
-items: []
+items:
+  - name: ore.ochre
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 1
+    worth: 10
+    stack_max: 1
+    toughness: 2.0
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.gild
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 2
+    worth: 35
+    stack_max: 1
+    toughness: 3.5
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.sunstone
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 3
+    worth: 120
+    stack_max: 1
+    toughness: 6.0
+    drill_tier: 2
+    added: 2026-11-28
+    revised: ""
+  - name: ore.seaglass
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 1
+    worth: 10
+    stack_max: 1
+    toughness: 2.0
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.verdite
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 2
+    worth: 35
+    stack_max: 1
+    toughness: 3.5
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.tidestone
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 3
+    worth: 120
+    stack_max: 1
+    toughness: 6.0
+    drill_tier: 2
+    added: 2026-11-28
+    revised: ""
+  - name: material.rock
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
+    category: material
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 20
+    added: 2026-11-28
+    revised: ""
+  - name: material.stick
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
+    category: material
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 20
+    added: 2026-11-28
+    revised: ""
+  - name: item.canister.oxygen
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: consumable
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 2
+    added: 2026-11-28
+    revised: ""
+  - name: gatherable.rock
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    category: gatherable
+    gives: material.rock
+    yield: 3
+    regrow_s: 600
+    spots_in_layout: 24
+    added: 2026-11-28
+    revised: ""
+  - name: gatherable.stick
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    category: gatherable
+    gives: material.stick
+    yield: 3
+    regrow_s: 600
+    spots_in_layout: 24
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -123,7 +269,111 @@ items: []
 #   output_range[min, max], added
 # Optional: expression (the actual formula), notes
 
-formulas: []
+formulas:
+  - name: container_worth
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    variables:
+      - count
+      - worth
+    output_range: [0, 1998000000000]
+    expression: "sum over filled slots of count * worth(id); 64-bit"
+    notes: "F5. Feeds the pack worth readout and glow, crew haul worth (sum of extraction minus sum of launch over the crew, floored at 0) and best-haul statistics."
+    added: 2026-11-28
+    revised: ""
+  - name: price_in_runs
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    variables:
+      - count
+      - worth
+      - pacing_haul_worth
+      - pacing_success_rate
+      - expected_yield
+    output_range: [0, 999999]
+    expression: "max(sum(count * worth(id)) / (pacing_haul_worth * pacing_success_rate), max(count / expected_yield(id)))"
+    notes: "F4. Validation-time report only. Bands (tuning): canister <= 0.15 runs, lost drill 0.5 to 1.0, repair <= 0.25, one-off 0.5 to 3, ceiling 15 to 30 runs. Yield price computed once Asteroid World publishes yields. Building and Crafting price against it."
+    added: 2026-11-28
+    revised: 2026-11-28
+  - name: rebuild_stock_ok
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    variables:
+      - stock
+      - need
+      - rebuild_margin
+    output_range: [false, true]
+    expression: "stock(m) >= ceil(need(m) * rebuild_margin); stock(m) = sum of yield over spots giving m"
+    notes: "F3. Validation refuses the catalog when false. need comes from Crafting and Building's rebuild set (workbench, hammer, basic drill, one shelter repair); provisional 40 rock and 40 stick until they define it. MVP stock 72 each, margin 1.25."
+    added: 2026-11-28
+    revised: ""
+  - name: rebuild_gather_time
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+      - design/gdd/player-controller.md
+    variables:
+      - need
+      - yield
+      - t_pick
+      - d_hop
+      - d_home
+      - walk_speed
+    output_range: [0, 7000]
+    expression: "sum over m of ceil(need(m)/yield(m)) * (t_pick + d_hop/walk_speed) + 2*d_home/walk_speed"
+    notes: "F4. Validation warning above valley_gather_time_max_s (300 s, half the concept's 10-minute rebuild). t_pick is Gathering's, walk_speed Player Controller's. About 103 s with MVP values."
+    added: 2026-11-28
+    revised: ""
+  - name: move_target_speed
+    status: active
+    source: design/gdd/player-controller.md
+    referenced_by:
+      - design/gdd/player-controller.md
+    variables:
+      - walk_speed
+      - sprint_speed
+      - full_pack_slow
+      - fill
+      - move
+    output_range: [0, 12]
+    expression: "(sprinting ? sprint_speed : walk_speed) * (1 - full_pack_slow * fill) * |move|"
+    notes: "F1. full_pack_slow and fill are Pack's; fill is 0 at home (slow on a run only). MVP with Pack's full_pack_slow 0.5: empty walk 3.8, empty sprint 6.2, full walk 1.9, full sprint 3.1 m/s. Escape targets (R5) need full_pack_slow >= 0.492 with burrower_speed 4.4 (full pack caught from 10 m in 7.7 s)."
+    added: 2026-11-28
+    revised: 2026-11-28
+  - name: loaded_clock
+    status: active
+    source: design/gdd/save-and-load.md
+    referenced_by:
+      - design/gdd/save-and-load.md
+    variables:
+      - save.clock
+      - note.clock
+    output_range: [0, null]
+    expression: "note readable and known version and same profile and note.clock > save.clock ? note.clock : save.clock"
+    notes: "F1. The play-time clock a session starts with; never earlier than the main save's. Storms resolves due storms from it."
+    added: 2026-11-28
+    revised: ""
+  - name: escape_crossover_fill
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+    variables:
+      - burrower_speed
+      - sprint_speed
+      - full_pack_slow
+    output_range: [0, 1]
+    expression: "(1 - burrower_speed / sprint_speed) / full_pack_slow"
+    notes: "F4. Validation warning outside 0.5 to 0.95; 0.581 with MVP values (9.3 of 16 slots). Ties Pack, Player Controller and Creature AI. Pack F5 adds escape times (7.7 s caught, 5.6 s gain)."
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -156,7 +406,82 @@ formulas: []
 #
 # Required fields: name, status, source, referenced_by, value, unit, added
 
-constants: []
+constants:
+  - name: pack_slots
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+      - design/gdd/ore-and-item-economy.md
+    value: 16
+    unit: count
+    notes: "tuning.pack; range 8 to 40; stack_scale 1, so one ore piece per slot (prototype, retested)"
+    added: 2026-11-28
+    revised: ""
+  - name: full_pack_slow
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+      - design/gdd/player-controller.md
+    value: 0.5  # was 0.35 (prototype); raised by design/gdd/pack.md F5 to meet Player Controller's escape targets
+    unit: share
+    notes: "tuning.pack; range 0 to 0.6; applied on a run only by Player Controller, with fill = filled slots / pack_slots (Pack F1, F2)"
+    added: 2026-11-28
+    revised: "2026-11-28"
+  - name: note_interval_s
+    status: active
+    source: design/gdd/save-and-load.md
+    referenced_by:
+      - design/gdd/save-and-load.md
+      - design/gdd/session-and-authority.md
+    value: 30
+    unit: s
+    notes: "tuning.save_and_load; range 5 to 120; play time between play-time notes (ADR-0003 Decision 8); bounds storm-clock time a crash can lose (F2)"
+    added: 2026-11-28
+    revised: ""
+  - name: walk_speed
+    status: active
+    source: design/gdd/player-controller.md
+    referenced_by:
+      - design/gdd/player-controller.md
+      - design/gdd/home-valley.md
+    value: 3.8
+    unit: m_per_s
+    notes: "tuning.player_controller; range 2 to 8; must stay at or below sprint_speed and below Creature AI's burrower_speed (4.4) by design intent; unslowed at home (the pack slow applies on a run only)"
+    added: 2026-11-28
+    revised: 2026-11-28
+  - name: sprint_speed
+    status: active
+    source: design/gdd/player-controller.md
+    referenced_by:
+      - design/gdd/player-controller.md
+    value: 6.2
+    unit: m_per_s
+    notes: "tuning.player_controller; range 3 to 12; forward part at least sprint_min_forward 0.7; escape targets (R5): empty pack gains 10 m on a burrower in <= 6 s, full pack caught from 10 m in <= 8 s (needs Pack's full_pack_slow >= 0.492)"
+    added: 2026-11-28
+    revised: 2026-11-28
+  - name: step_offset
+    status: active
+    source: design/gdd/player-controller.md
+    referenced_by:
+      - design/gdd/player-controller.md
+    value: 0.45
+    unit: m
+    notes: "tuning.player_controller; Building must keep walkable piece edges at or below it or provide stairs"
+    added: 2026-11-28
+    revised: ""
+  - name: slope_limit_rad
+    status: active
+    source: design/gdd/player-controller.md
+    referenced_by:
+      - design/gdd/player-controller.md
+      - design/gdd/home-valley.md
+    value: 0.785
+    unit: rad
+    notes: "tuning.player_controller; 45 degrees, stored in rad (Game Data & Tuning R5 has no degrees; was slope_limit_deg 45); Home Valley's rim and Asteroid World's walls must be steeper"
+    added: 2026-11-28
+    revised: 2026-11-28
 
 # Example:
 #

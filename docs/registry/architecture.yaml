@@ -40,7 +40,7 @@
 #   unsupported layout, with its number.
 
 version: 1
-last_updated: ""
+last_updated: "2026-11-27"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -53,7 +53,55 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: run_and_player_state
+    status: active
+    owner_system: session-host-authority
+    adr: docs/architecture/adr-0001-network-model.md
+    interface: "Replicated state published by the Authority layer (read-only on every client); changes only by a request the host validates through the Simulation. Covers pack, tool, oxygen, health, ore seams, creatures and hunters, run clock, extraction, stash, crafting."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+      - docs/architecture/adr-0002-persistence.md   # saves and loads the stash and progress part of it
+      - docs/architecture/adr-0003-home-and-storm-persistence.md   # adds the home model and storm clock as host-owned state
+    added: 2026-11-26
+    revised: ""
+
+  - state: persistent_profile
+    status: active
+    owner_system: persistence-service
+    adr: docs/architecture/adr-0002-persistence.md
+    # Old value (before ADR-0003, 2026-11-27): "ISaveStore.Load() / Save(SaveModel), called only by the host's Authority layer; the Simulation exchanges a plain SaveModel and never touches files. Covers stash, gear, recipes, statistics and the run marker."
+    # Value from 2026-11-27 until the ADR-0003 amendment the same day: "...Covers the home (structures and pieces), containers keyed by piece id, carried items, the storm clock, gear, recipes, statistics and the run marker."
+    interface: "The host's Authority layer loads through ISaveQueue.LoadAndWait() and hands immutable SaveModel snapshots to ISaveQueue; only the queue's single writer calls ISaveStore.Load() / Save(SaveModel). The Simulation exchanges a plain SaveModel and never touches files. Covers the home (structures and pieces), containers keyed by piece id, carried items (pack, tool, equipped gear; no separate gear field, every item in exactly one place), the storm clock, recipes, statistics and the run marker."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0002-persistence.md
+      - docs/architecture/adr-0003-home-and-storm-persistence.md   # extends the save model and moves the write off the main thread
+    added: 2026-11-26
+    revised: 2026-11-27
+
+  - state: home_model
+    status: active
+    owner_system: building
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    interface: "Session-level Simulation state, never owned by a scene object. Changed only through Building's TryPlace / TryRemove / TryRepairAll (each returns a change list and a new revision number) and IStructureDamage; read through the shelter query IsSheltered(pieceId), a pure function of the model. Pieces reach Presentation as data, never one networked object each."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
+
+  - state: storm_clock
+    status: active
+    owner_system: storms
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    interface: "Play time in milliseconds advanced only by the Simulation tick, plus the saved next storm (time, strength) and generator state. Storms are resolved only by Storms' AdvanceTo(playTimeMs), which returns StormReport values; other systems read the next storm's time and strength and never write the clock."
+    write_access: host-only
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
 
 # Example:
 #
@@ -81,7 +129,48 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: player_intent_request
+    status: active
+    pattern: rpc
+    producer: presentation
+    consumers:
+      - session-host-authority
+    adr: docs/architecture/adr-0001-network-model.md
+    signal_signature: "One client-to-host request per player intent (mine, pick up, extract, craft); the host validates through IRunSimulation and never trusts a client-supplied result"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
+
+  - contract: save_request
+    status: active
+    pattern: direct_call
+    producer: session-host-authority
+    consumers:
+      - persistence-service
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    # Before the ADR-0003 amendment (2026-11-27) there was no LoadAndWait.
+    signal_signature: "ISaveQueue.LoadAndWait() at start-up only, with no time-out; Request(snapshot) returns at once; RequestAndWait(snapshot) completes with success, failure or timed-out; NotePlayTime(playTimeMs); Drain(). One pending snapshot and one pending note, newest wins within each kind. Only the queue's writer calls ISaveStore."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: 2026-11-27
+
+  - contract: storm_damage_delivery
+    status: active
+    pattern: direct_call
+    producer: storms
+    consumers:
+      - building
+      - stash
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    # Before the ADR-0003 amendment (2026-11-27): IStructureDamage returned nothing and the container-clearing call only emptied.
+    signal_signature: "Storms decides the damage and calls Building's IStructureDamage (apply a storm of a given strength; returns the ids of pieces damaged and destroyed, destroyed pieces already out of the model), Building's shelter query, and Stash's container-clearing call (empty, or empty and remove for a destroyed piece). Building and Stash never reference Storms; Run Flow never calls Storms. At run end the Authority layer calls AdvanceTo before the haul is placed."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: 2026-11-27
 
 # Example:
 #
@@ -110,7 +199,16 @@ interfaces: []
 # Register a budget when an ADR explicitly claims a frame time allocation.
 # The registry lets /architecture-review verify the total doesn't exceed the target.
 
-performance_budgets: []
+performance_budgets:
+  - system: persistence
+    status: active
+    budget_ms: 1.0
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    notes: "Main-thread cost of one save point (the snapshot) with a 2,000-piece home, with near-zero managed allocation per save point. A target, not yet measured; serializing and file work run on the background writer."
+    referenced_by:
+      - docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+    revised: ""
 
 # Example:
 #
@@ -141,7 +239,39 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: multiplayer_networking
+    status: active
+    api: Netcode for GameObjects (com.unity.netcode.gameobjects), host-authoritative client-server topology
+    not: UNet, Mirror, Photon, dedicated server
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Official stack covered by the engine reference; host mode fits players-versus-AI co-op and solo as a one-player host"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
+
+  - purpose: rpc_declaration
+    status: active
+    api: "[Rpc(SendTo...)] attribute with an Rpc method-name suffix"
+    not: "[ServerRpc] / [ClientRpc] for new code"
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Recommended form in the Netcode for GameObjects 3.2.1 manual, read 2026-11-26"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
+
+  - purpose: solo_session_transport
+    status: active
+    api: SinglePlayerTransport, assigned before the host starts
+    not: a network socket transport for solo play
+    adr: docs/architecture/adr-0001-network-model.md
+    reason: "Solo must work offline with no firewall prompt and no network error"
+    referenced_by:
+      - docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+    revised: ""
 
 # Example:
 #
@@ -167,7 +297,90 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: presentation_writes_game_state
+    status: active
+    description: "Views, HUD, audio, VFX and input code must never change game state or contain a rule (a threshold, a cost, a yield)."
+    why: "State must have one writer, the host, or co-op diverges and loot can duplicate."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: simulation_references_netcode
+    status: active
+    description: "Simulation code must never reference the Netcode package, MonoBehaviour lifecycle, scene singletons, or read assets itself."
+    why: "Rules must be testable in EditMode without a scene or a session."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: offline_only_rule_path
+    status: active
+    description: "There must never be a separate solo or offline code path for a rule; solo goes through ISessionHost.StartSolo() and the same request path as co-op."
+    why: "A second path is never exercised by co-op and drifts from the first."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: netcode_manager_singleton_access
+    status: active
+    description: "Code must never access the Netcode manager's singleton outside the ISessionHost implementation."
+    why: "Hidden global coupling makes systems untestable and ties them to one transport."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: unet_usage
+    status: active
+    description: "UNet must never be used."
+    why: "Deprecated per docs/engine-reference/unity/modules/networking.md."
+    adr: docs/architecture/adr-0001-network-model.md
+    added: 2026-11-26
+
+  - pattern: simulation_file_io
+    status: active
+    description: "Simulation code must never read or write files; it exchanges a SaveModel with the persistence service only."
+    why: "Rules must stay testable without a disk, and saves must have one writer on the host."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+
+  - pattern: progress_in_engine_preferences
+    status: active
+    description: "Game progress must never be stored in the engine's preferences store (PlayerPrefs). Settings and key bindings may use it."
+    why: "On Windows it is the registry: no atomic write, no backups, no versioning."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+
+  - pattern: run_state_saved
+    status: "superseded_by: ADR-0003"
+    description: "Run state must never be saved, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
+    why: "Loss must stick; resuming or reloading a run removes the game's core stake."
+    adr: docs/architecture/adr-0002-persistence.md
+    added: 2026-11-26
+
+  - pattern: run_state_saved_beyond_play_time
+    status: active
+    description: "Run state must never be saved, with one exception: the play-time note, which holds only a note format version, the profile id and the storm clock. The pack is not saved during a run, a run can never be resumed, and backups must never be offered as a way to undo a loss. A run marker found at start-up resolves as a loss of the carried items."
+    why: "Loss must stick; an abandoned run must still count the time actually played."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: home_state_in_scene_or_physics
+    status: active
+    description: "The home model and storm clock must never be owned by scene objects or read back from the scene, and the shelter check must never use physics, colliders or a loaded scene."
+    why: "The home scene is not loaded during a run, and rules must be testable without a scene."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: action_split_across_writes
+    status: active
+    description: "An action's cost and its result (materials spent, piece added) must never be saved by separate writes or in separate files; both go in one snapshot of the one save document."
+    why: "A crash between two writes would duplicate or destroy materials."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
+
+  - pattern: second_storm_path_or_wall_clock
+    status: active
+    description: "Storms must never be resolved anywhere but Storms' AdvanceTo, and the storm clock must never read the wall clock or depend on the engine's time scale."
+    why: "Home, run end and crash recovery must give the same result, and storms must not run while the game is closed."
+    adr: docs/architecture/adr-0003-home-and-storm-persistence.md
+    added: 2026-11-27
 
 # Example:
 #

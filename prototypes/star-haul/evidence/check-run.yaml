@@ -1,0 +1,147 @@
+# The one-shot's small check (check-run/1).
+# Written by one-shot-check.sh --record: the results are /prototype's reading of
+# evidence/self-check.tsv; never edited by hand.
+kind: check-run/1
+engine: web
+browser: "HeadlessChrome/158.0.0.0"
+time: "2026-11-26 04:04:45"
+checks:
+  - id: boots
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: shot
+    result: pass
+    evidence:
+      - "evidence/play.png"
+  - id: outlines
+    result: pass
+    evidence:
+      - "evidence/figures.png"
+  - id: brief-words
+    result: pass
+    evidence:
+      - "evidence/brief-words.tsv"
+  - id: emoji
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: nearest-game
+    result: pass
+    evidence:
+      - "evidence/nearest-game.txt"
+brief_checklist:
+  - id: L1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Look: Cargo Is the Colour. A chunky, rounded, flat-shaded asteroid in chalky pastels under bright sunlight; ore is the only faceted, glossy, fully saturated thing, and richer ore is more saturated. Hot magenta means danger and nothing else: the creatures, and your oxygen gauge when low. Signature detail: your pack glows brighter as it fills. Every figure drawn, no emoji, no plain circles."
+  - id: L2
+    result: pass
+    evidence: "evidence/play.png"
+    item: "References: Astroneer (a colourful, friendly space mood; not its look), Escape from Tarkov (the haul and the loss)."
+  - id: L3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "View: 3D · Camera: first person."
+  - id: F1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "First-person mining: rock cracks in stages, ore flies to the pack"
+  - id: F2
+    result: pass
+    evidence: "index.html:166"
+    item: "One hand-made asteroid: a safe landing area, three zones of rising richness and danger *(provisional)*"
+  - id: F3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Oxygen that drains all run and faster when sprinting"
+  - id: F4
+    result: not_run
+    mark: not assessed
+    why: "both kinds are drawn, each with its own outline, and the wake-on-noise code is in index.html (makeNoise, updateCreatures); no run woke one, so it was not seen working"
+    evidence: "evidence/figures.png"
+    item: "Creatures in the rock that wake from mining noise, 2 kinds *(guessed)*"
+  - id: F5
+    result: pass
+    evidence: "evidence/play.png"
+    item: "A limited pack with its worth on screen"
+  - id: F6
+    result: not_run
+    mark: not assessed
+    why: "boarding at the ship and losing pack and tool on death are coded; no run boarded or died"
+    evidence: "index.html:331"
+    item: "The ship as the exit; death loses pack and tool"
+  - id: F7
+    result: not_run
+    mark: not assessed
+    why: "the home room, stash wall and goal line render; unpacking, the saved stash and crafting are coded in index.html (updateHome) but no run used them"
+    evidence: "evidence/home.png"
+    item: "Home: a saved stash and one crafting bench with the better drill (thin stand-in)"
+  - id: S1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "mining runs · in the slice"
+  - id: S2
+    result: not_run
+    mark: not assessed
+    why: "two recipes at the bench; not used in a run"
+    evidence: "index.html:596"
+    item: "crafting · thin stand-in *(guessed)*"
+  - id: S3
+    result: pass
+    evidence: "evidence/home.png"
+    item: "home space station · thin stand-in *(guessed)*"
+  - id: S4
+    result: not_run
+    mark: not assessed
+    why: "the ship stands on the pad as the exit and the hatch launches a run; not used in a run"
+    evidence: "index.html:302"
+    item: "taking a spaceship · thin stand-in *(guessed)*"
+  - id: M1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "You step out of your ship onto a sunlit pastel asteroid, drill in hand, oxygen full."
+  - id: M2
+    result: pass
+    evidence: "evidence/play.png"
+    item: "A glossy blue seam glints a few steps away."
+  - id: M3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "You hold the drill on it, the rock cracks in stages, ore pops out and flies into your pack, and the pack's worth ticks up for the first time."
+  - id: M4
+    result: not_run
+    mark: not assessed
+    why: "seams and a sleeping Burrower with a dull magenta glow lie past the pad; not seen in a shot"
+    evidence: "index.html:231"
+    item: "A second seam glints further in, past the edge of the safe landing area, where the rock is darker and something magenta stirs."
+  - id: C1
+    result: not_run
+    mark: not assessed
+    why: "creatures give up and Spitters sleep while the player is on the pad; not played"
+    evidence: "index.html:511"
+    item: "The landing area is safe."
+  - id: C2
+    result: not_run
+    mark: not assessed
+    why: "oxygen was seen draining; creatures waking from noise and the Deep's density were not played"
+    evidence: "index.html:498"
+    item: "Beyond it the threat is constant: oxygen drains the whole run, and creatures sleep in the rock and wake from mining noise near them, so the richest seams, deepest in, are the most dangerous to work."
+  - id: C3
+    result: not_run
+    mark: not assessed
+    why: "coded; no run died"
+    evidence: "index.html:331"
+    item: "Running out of oxygen or being killed loses the pack and the tool; you start the next run with a basic drill."
+  - id: C4
+    result: not_run
+    mark: not assessed
+    why: "Sunstone refuses the basic drill and the Better Drill cuts it; not played"
+    evidence: "index.html:440"
+    item: "Later, a better drill opens harder rock deeper in."
+measures:
+  - id: step-time
+    value: 1.400
+    unit: ms
+    by: browser
+    detail: "mean 0.027 ms, slowest 1.400 ms, 344 steps"

@@ -1,0 +1,60 @@
+# Where each file in assets/ and vendor/ came from, one entry per file. The field names are the
+# provenance record's, so the entries carry over when the game grows.
+# - path: assets/hit.wav      # relative to this game's folder
+#   origin: ai                # ai | bought | cc0 | you | outsourced | template | plugin | licensed | code | unknown
+#   tool: "what made or fetched it: the generator, or the script for code"
+#   model: "the model ID, when a model made it or an AI wrote its code"
+#   source: {vendor: "who made or sold it", product: "its name", url: "where from"}   # a download
+#   licence: {id: CC0-1.0}    # a download: the SPDX id where one exists
+#   date: 2026-01-31
+#   ships: true               # false for a file only the build uses
+#   placeholder: true         # until it is replaced; leave the line out otherwise
+- path: vendor/three.js
+  origin: licensed
+  source: {product: three.js, version: "0.186.1", url: https://threejs.org}
+  licence: {id: MIT}
+  tool: "esbuild 0.28.2, one plain script for play from a file"
+  date: 2026-11-26
+  ships: true
+- path: assets/polyhaven.js
+  origin: cc0
+  source: {vendor: Poly Haven, product: "Boulder 01 (model); Rock Boulder Dry, Rock Boulder Cracked (textures)", url: https://polyhaven.com}
+  licence: {id: CC0-1.0}
+  tool: "Poly Haven public API, 1k glTF; textures re-encoded as JPEG and embedded as data"
+  date: 2026-11-26
+  ships: true
+- path: assets/oga-rocks.js
+  origin: cc0
+  source: {vendor: OpenGameArt, product: "Handpainted style rocks", url: https://opengameart.org/content/handpainted-style-rocks}
+  licence: {id: CC0-1.0}
+  tool: "five OBJ rocks with colour and normal textures, embedded as data"
+  date: 2026-11-26
+  ships: true
+- path: assets/oga-crystals.js
+  origin: cc0
+  source: {vendor: iPoly3D, product: "Lowpoly crystals pack", url: https://opengameart.org/content/lowpoly-crystals-pack}
+  licence: {id: CC0-1.0}
+  tool: "the pack's GLB, embedded as data; a commenter on the page disputes the terms"
+  date: 2026-11-26
+  ships: true
+- path: assets/cobden-rocks.js
+  origin: licensed
+  source: {vendor: Elijah Cobden, product: "Stylized Rock Pack", url: https://elijahcobden.itch.io/stylized-rock-pack}
+  licence: {id: CC-BY-4.0}
+  tool: "four FBX rock collections and their normal maps (scaled to 1k JPEG) from the URP Unity package the designer supplied, embedded as data; credit Elijah Cobden"
+  date: 2026-11-26
+  ships: true
+- path: assets/quaternius-monsters.js
+  origin: licensed
+  source: {vendor: Quaternius, product: "Ultimate Monsters Pack (Squidle, Mushnub Evolved)", url: https://quaternius.com/packs/ultimatemonsters.html}
+  licence: {id: CC-BY-4.0}
+  tool: "two monsters' shapes and colours taken from the Sketchfab GLB the designer supplied, in rest pose, no animation; that file states CC-BY 4.0 (the author's site says CC0): credit Quaternius"
+  date: 2026-11-26
+  ships: true
+- path: assets/polyhaven-home.js
+  origin: cc0
+  source: {vendor: Poly Haven, product: "Drill 01, Steel Frame Shelves 01, Worn Metal Rack, Metal Tool Chest, Tool Cart, Bench Vice 01, Metal Office Desk, Plastic Crate 01, Old Military Crate, Barrel 03, Propane Tank, Mounted Fluorescent Lights, Portable Generator, Rollershutter Door, Vintage Spacecraft Instrument (models); Hangar Concrete Floor, Metal Plate, Corrugated Iron (textures)", url: https://polyhaven.com}
+  licence: {id: CC0-1.0}
+  tool: "Poly Haven public API, 1k glTF; textures re-encoded smaller as JPEG and embedded as data"
+  date: 2026-11-26
+  ships: true

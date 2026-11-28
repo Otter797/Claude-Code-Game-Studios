@@ -1,0 +1,51 @@
+time	2026-11-26 04:04:45
+keep	lines	0	pinned	0
+briefword	first person	shown	evidence/play.png
+briefword	the game	shown	evidence/play.png
+briefword	First-person	shown	evidence/play.png
+checklist	L1	unlisted	-	Look: Cargo Is the Colour. A chunky, rounded, flat-shaded asteroid in chalky pastels under bright sunlight; ore is the only faceted, glossy, fully saturated thing, and richer ore is more saturated. Hot magenta means danger and nothing else: the creatures, and your oxygen gauge when low. Signature detail: your pack glows brighter as it fills. Every figure drawn, no emoji, no plain circles.	
+checklist	L2	unlisted	-	References: Astroneer (a colourful, friendly space mood; not its look), Escape from Tarkov (the haul and the loss).	
+checklist	L3	unlisted	-	View: 3D · Camera: first person.	
+checklist	F1	unlisted	-	First-person mining: rock cracks in stages, ore flies to the pack	
+checklist	F2	unlisted	-	One hand-made asteroid: a safe landing area, three zones of rising richness and danger *(provisional)*	
+checklist	F3	unlisted	-	Oxygen that drains all run and faster when sprinting	
+checklist	F4	unlisted	-	Creatures in the rock that wake from mining noise, 2 kinds *(guessed)*	
+checklist	F5	unlisted	-	A limited pack with its worth on screen	
+checklist	F6	unlisted	-	The ship as the exit; death loses pack and tool	
+checklist	F7	unlisted	-	Home: a saved stash and one crafting bench with the better drill (thin stand-in)	
+checklist	S1	unlisted	-	mining runs · in the slice	
+checklist	S2	unlisted	-	crafting · thin stand-in *(guessed)*	
+checklist	S3	unlisted	-	home space station · thin stand-in *(guessed)*	
+checklist	S4	unlisted	-	taking a spaceship · thin stand-in *(guessed)*	
+checklist	M1	unlisted	-	You step out of your ship onto a sunlit pastel asteroid, drill in hand, oxygen full.	
+checklist	M2	unlisted	-	A glossy blue seam glints a few steps away.	
+checklist	M3	unlisted	-	You hold the drill on it, the rock cracks in stages, ore pops out and flies into your pack, and the pack's worth ticks up for the first time.	
+checklist	M4	unlisted	-	A second seam glints further in, past the edge of the safe landing area, where the rock is darker and something magenta stirs.	
+checklist	C1	unlisted	-	The landing area is safe.	
+checklist	C2	unlisted	-	Beyond it the threat is constant: oxygen drains the whole run, and creatures sleep in the rock and wake from mining noise near them, so the richest seams, deepest in, are the most dangerous to work.	
+checklist	C3	unlisted	-	Running out of oxygen or being killed loses the pack and the tool; you start the next run with a basic drill.	
+checklist	C4	unlisted	-	Later, a better drill opens harder rock deeper in.	
+webgl	ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+browser	HeadlessChrome/158.0.0.0
+console	play	1964	[.WebGL-0x2e3c00344800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+scene	play	0	title
+saved	play	0	localstorage	star-haul-save-v1
+scene	play	1	play
+digits	log	bold 22px "Trebuchet MS", "Segoe UI", sans-serif	proportional	5.393
+digits	log	bold 38px "Trebuchet MS", "Segoe UI", sans-serif	proportional	9.314
+digits	log	20px "Trebuchet MS", "Segoe UI", sans-serif	proportional	4.785
+measure	step-time	play	0.027	1.400	344
+lane	play	stop	5.7	457
+console	play	0	[.WebGL-0x2e3c00344800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+console	play	0	[.WebGL-0x2e3c00344800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+uncaught	play	0
+text	play	canvas	273,42,322,60	31.5	16.93	inside	8:54
+text	play	canvas	280,86,322,104	31.5	16.93	inside	100
+text	play	canvas	1134,29,1239,42	24.0	11.73	inside	PACK WORTH
+text	play	canvas	1194,48,1238,78	55.5	15.10	inside	10
+text	play	canvas	516,669,792,690	30.0	16.93	inside	Ship 10 m   ·   walk back 0:02
+text	play	canvas	563,421,717,438	30.0	16.93	inside	Glint  ·  worth 10
+text	play	canvas	522,612,759,627	27.0	11.73	inside	Click to look with the mouse
+screen	play	drawn
+shot	play	prototypes/star-haul/evidence/play.png
+responds	changed	4
