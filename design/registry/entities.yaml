@@ -54,7 +54,7 @@
 #   in any other shape is reported as unsupported layout, with its number.
 
 version: 1
-last_updated: ""
+last_updated: "2026-11-28"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -94,7 +94,127 @@ entities: []
 # Attribute fields: value_gold, weight, stackable, category, and any stat
 #   modifiers that another system (e.g., economy, crafting) might reference.
 
-items: []
+items:
+  - name: ore.ochre
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 1
+    worth: 10
+    stack_max: 1
+    toughness: 2.0
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.gild
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 2
+    worth: 35
+    stack_max: 1
+    toughness: 3.5
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.sunstone
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: amber
+    tier: 3
+    worth: 120
+    stack_max: 1
+    toughness: 6.0
+    drill_tier: 2
+    added: 2026-11-28
+    revised: ""
+  - name: ore.seaglass
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 1
+    worth: 10
+    stack_max: 1
+    toughness: 2.0
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.verdite
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 2
+    worth: 35
+    stack_max: 1
+    toughness: 3.5
+    drill_tier: 1
+    added: 2026-11-28
+    revised: ""
+  - name: ore.tidestone
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: ore
+    family: teal
+    tier: 3
+    worth: 120
+    stack_max: 1
+    toughness: 6.0
+    drill_tier: 2
+    added: 2026-11-28
+    revised: ""
+  - name: material.rock
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: material
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 20
+    added: 2026-11-28
+    revised: ""
+  - name: material.stick
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: material
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 20
+    added: 2026-11-28
+    revised: ""
+  - name: item.canister.oxygen
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    category: consumable
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 2
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -123,7 +243,34 @@ items: []
 #   output_range[min, max], added
 # Optional: expression (the actual formula), notes
 
-formulas: []
+formulas:
+  - name: container_worth
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    variables:
+      - count
+      - worth
+    output_range: [0, 1998000000000]
+    expression: "sum over filled slots of count * worth(id); 64-bit"
+    notes: "F5. Feeds the pack worth readout and glow, haul worth at extraction (extraction minus launch, floored at 0) and best-haul statistics."
+    added: 2026-11-28
+    revised: ""
+  - name: price_in_runs
+    status: active
+    source: design/gdd/ore-and-item-economy.md
+    referenced_by:
+      - design/gdd/ore-and-item-economy.md
+    variables:
+      - count
+      - worth
+      - pacing_haul_worth
+    output_range: [0, 999999]
+    expression: "sum(count * worth(id)) / pacing_haul_worth"
+    notes: "F4. Validation-time report only. Bands: recurring cost <= 0.25 runs, one-off 0.5 to 3, ceiling 15 to 30 runs. Building and Crafting price against it."
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
