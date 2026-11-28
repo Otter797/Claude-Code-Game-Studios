@@ -100,6 +100,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: amber
     tier: 1
@@ -114,6 +115,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: amber
     tier: 2
@@ -128,6 +130,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: amber
     tier: 3
@@ -142,6 +145,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: teal
     tier: 1
@@ -156,6 +160,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: teal
     tier: 2
@@ -170,6 +175,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/tools-and-gear.md
     category: ore
     family: teal
     tier: 3
@@ -239,6 +245,58 @@ items:
     yield: 3
     regrow_s: 600
     spots_in_layout: 24
+    added: 2026-11-28
+    revised: ""
+  - name: tool.hammer
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
+    category: tool
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 1
+    verb: repair
+    drill_tier: 0
+    drill_power: 0
+    added: 2026-11-28
+    revised: ""
+  - name: tool.drill.basic
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
+      - design/gdd/game-data-and-tuning.md
+    category: tool
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 1
+    verb: drill
+    drill_tier: 1
+    drill_power: 1.0
+    added: 2026-11-28
+    revised: ""
+  - name: tool.drill.better
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/game-data-and-tuning.md
+    category: tool
+    family: none
+    tier: 0
+    worth: 0
+    stack_max: 1
+    verb: drill
+    drill_tier: 2
+    drill_power: 2.0
     added: 2026-11-28
     revised: ""
 
@@ -374,6 +432,50 @@ formulas:
     notes: "F4. Validation warning outside 0.5 to 0.95; 0.581 with MVP values (9.3 of 16 slots). Ties Pack, Player Controller and Creature AI. Pack F5 adds escape times (7.7 s caught, 5.6 s gain)."
     added: 2026-11-28
     revised: ""
+  - name: drill_gate
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+      - design/gdd/ore-and-item-economy.md
+    variables:
+      - verb
+      - drill_tier_tool
+      - drill_tier_ore
+    output_range: [0, 1]
+    expression: "verb == drill AND drill_tier_tool >= drill_tier_ore"
+    notes: "F1. Boolean (0 false, 1 true). Applied by Mining at every begin intent; refusal message 'Needs a better drill'."
+    added: 2026-11-28
+    revised: ""
+  - name: drill_ladder_check
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+    variables:
+      - drill_power
+      - toughness
+      - min_ladder_ratio
+      - max_piece_s
+    output_range: [0.05, 67]
+    expression: "ladder_ratio = min_power(tier n+1) / max_power(tier n); slowest_piece_s = max over ores (toughness / weakest able drill power)"
+    notes: "F2. Catalog-load warning, never a refusal. MVP: ratio 2.0, slowest piece 3.5 s. Assumes Mining's time = toughness / drill_power."
+    added: 2026-11-28
+    revised: ""
+  - name: equip_ready
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+    variables:
+      - change_tick
+      - equip_time_s
+      - tick_rate_hz
+    output_range: [2, 60]
+    expression: "ready_tick = change_tick + ceil(equip_time_s * tick_rate_hz)"
+    notes: "F3. Output range is the delay in ticks; 9 ticks with MVP values (0.3 s at 30 Hz)."
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -482,6 +584,28 @@ constants:
     notes: "tuning.player_controller; 45 degrees, stored in rad (Game Data & Tuning R5 has no degrees; was slope_limit_deg 45); Home Valley's rim and Asteroid World's walls must be steeper"
     added: 2026-11-28
     revised: 2026-11-28
+  - name: tool_slots
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+      - design/gdd/ore-and-item-economy.md
+      - design/gdd/input.md
+    value: 3
+    unit: count
+    notes: "tuning.tools_and_gear; range 1 to 6; container carried.<playerId>.tools, stack_scale 1, accepts tool; keys 1 to 3"
+    added: 2026-11-28
+    revised: ""
+  - name: equip_time_s
+    status: active
+    source: design/gdd/tools-and-gear.md
+    referenced_by:
+      - design/gdd/tools-and-gear.md
+    value: 0.3
+    unit: s
+    notes: "tuning.tools_and_gear; range 0.1 to 1.0; kept below the burrower's 0.55 s bite wind-up"
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
