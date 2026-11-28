@@ -36,3 +36,50 @@ Reviewed-Content-Hash: prototypes/star-haul/config.js 55a14141ee3b2ccb741b84b9fe
 
 ### Revision 1 — 2026-11-27 (not a review)
 All 10 blocking items and the recommended items revised in the same session, at the designer's request ("Revise it here"). The creative-director's rulings (a)-(d) were applied as decided; the GDD lists them as decisions 12-17. Recommended items included: the cross-key `constraints` list, numbers for one thing moved onto definitions, `provisional` gating release candidates, OQ2 closed, the R2 regex, and the ADR-0004 hand-offs. Deferred as nice-to-haves: tuning profiles (OQ4), a display-coverage check, and retired-list tooling. Acceptance Criteria rewritten (45 criteria, with a traceability table). Status set to In Review; a fresh-session `/design-review` decides Approved.
+
+## Review — 2026-11-28 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: L
+Specialists: game-designer, systems-designer, qa-lead, unity-specialist, creative-director (senior)
+Blocking items: 12 | Recommended: 14
+Summary: Revision 1 resolved all ten first-review blockers; the architecture is sound and no pillar or scope question is open. What remains is precision and contracts: float width, the D2 grid and the D4 byte layout would come out differently for two implementers, R9 check ownership is unclear, and the live-tuning loop lacks a re-injection contract and a safe "keep". Rulings: `live_tuning_enabled` and live re-injection are blocking; the negative-rounding tie rule folds into the D2 grid fix; dev-only out-of-range live edits rejected for MVP (validate-on-save instead); definition-field ranges move to a per-kind limits record in data, keeping the schema number-free.
+Prior verdict resolved: Yes (all 10 prior blocking items)
+Findings:
+- [BLOCKING] Core Rules R3 / Formulas D3, D4: float width never stated; rules view holds floats as double, systems narrow on intake (AC20, AC22 restated)
+- [BLOCKING] Formulas D2: `d` not recoverable from stored numbers, default step collapses the grid, absolute epsilon lets a position exceed max, two conflicting tie rules; use a scaled-integer grid, distinct positions clamped to max, one tie rule on the index
+- [BLOCKING] Formulas D4: sort key ties for value/min/max/step/unit/apply; type tags, enum/string/id/list/pair and absent-field encoding undefined; golden vector from an independent hasher
+- [BLOCKING] Core Rules R3 / R9: no type set for non-numeric definition fields (enum, id(kind), list, record)
+- [BLOCKING] Core Rules R1 / R9: definition-field ranges sit on each instance; move to a per-kind limits record; add constraints between fields of one definition
+- [BLOCKING] Core Rules R9: check ownership; check 7 unit/type, check 8 ranges/signs, a check for rationale, apply, type, owner and well-formed constraints; AC12 and AC15 name their checks
+- [BLOCKING] Core Rules R9: cascade wording contradicts AC5; "a reference to an id that failed check 2 or 3 is not reported"; settle retired references (Edge Cases, AC3)
+- [BLOCKING] Tuning Knobs: `live_tuning_enabled` as one data record cannot differ per build and splits the fingerprint; make it compile-time, strip the panel from release, keep it out of the catalog and D4
+- [BLOCKING] Core Rules R8 / R11: start-up-scene bootstrap breaks Play-from-any-scene; with domain reload off statics leak; bootstrap via RuntimeInitializeOnLoadMethod, reset at SubsystemRegistration, add an AC
+- [BLOCKING] Core Rules R12: no live re-injection contract; name the mechanism, require `apply: restart` for systems that precompute, ask Session & Authority for the live path
+- [BLOCKING] Core Rules R12: "keep" writes one value and can leave a broken constraint on disk; validate the whole set and write all or nothing
+- [BLOCKING] Dependencies / Interactions: stale (Session & Authority, Input, Ore & Item Economy exist; Input missing; `tuning.economy` should be `tuning.ore_and_item_economy`; Save & Load gets three answers)
+- [RECOMMENDED] Core Rules R11: name allowed build-content sources, ban StreamingAssets, CI check that no rules asset is in an Addressables group, display data in separate assets via AssetReference
+- [RECOMMENDED] Acceptance Criteria 24: PlayMode test in an IL2CPP player; link.xml for SHA256
+- [RECOMMENDED] Acceptance Criteria 33: measure scene deserialisation; budget out of the catalog it measures
+- [RECOMMENDED] Core Rules R3 / R9: define "release-candidate build"; gate provisional at build time
+- [RECOMMENDED] Core Rules R5 / D1: int64 range arithmetic; add `hz`; rein in `level` (Ore toughness is seconds per piece)
+- [RECOMMENDED] Core Rules R3: constraints cannot express Session & Authority's product rule
+- [RECOMMENDED] Formulas D1 / D2: "first click only snaps" vs snap-and-move
+- [RECOMMENDED] Core Rules R12: validate on asset save in the editor; keep updates rationale and provisional; export changes from development players
+- [RECOMMENDED] Core Rules R1: category for player-overridable defaults (look_sens, stick_deadzone)
+- [RECOMMENDED] Core Rules R3: make `apply: restart` the safe default
+- [RECOMMENDED] Core Rules R9: ownership of shared definition fields across owners (Ore's common fields on tool and gear)
+- [RECOMMENDED] Acceptance Criteria: AC13 banker's-rounding case; AC29/32/43 provisional on ADR-0004; R9 asset field a list; split AC40; rename the "Data" type
+- [RECOMMENDED] Acceptance Criteria: untested clauses (passed values live, in-session load keeps live values, reset as one revision, R11 remote content); AC25 to AC28 fixes
+- [RECOMMENDED] Open Questions: log dev-only out-of-range live edits for after the playable build
+Reviewed-Content-Hash: design/gdd/game-data-and-tuning.md 0a88e110b40895b7451b2759c0c26cf7e215dc3b
+Reviewed-Content-Hash: design/registry/entities.yaml 678b96de87a9a61989869e1bc298460ecab0d0bc
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/game-concept.md 938271886e41e9485ac0192a80f58c67d7875873
+Reviewed-Content-Hash: design/gdd/systems-index.md 56183b7bf4c1fee922bc1f5c5cb438b87736b3ec
+Reviewed-Content-Hash: design/gdd/session-and-authority.md 56052cdb82245100a8deb59e2984580acc240911
+Reviewed-Content-Hash: design/gdd/input.md f385068b2c3dd573b538fb000c6f5d9a794ed947
+Reviewed-Content-Hash: design/gdd/ore-and-item-economy.md b0a3d3490bad7892071a78cd9aa307382ace6c4a
+Reviewed-Content-Hash: docs/architecture/adr-0001-network-model.md cc84170cdb537f0c15976dd57743b457eb7a5897
+Reviewed-Content-Hash: docs/architecture/adr-0002-persistence.md fcc09078ab3cf8ce67a91af226183714eb5d29a8
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+Reviewed-Content-Hash: prototypes/star-haul/config.js 55a14141ee3b2ccb741b84b9fe7e0e1979f5ce38
