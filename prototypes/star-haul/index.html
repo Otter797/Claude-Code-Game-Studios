@@ -557,8 +557,10 @@ function updateCreatures(dt, playerSafe) {
           let nx = c.x + (c.wx - c.x) / dw * tune.burrower_roam_speed * dt, nz = c.z + (c.wz - c.z) / dw * tune.burrower_roam_speed * dt;
           [nx, nz] = pushOut(nx, nz, SOLIDS, 0.9); c.face = Math.atan2(c.wx - c.x, c.wz - c.z); c.x = nx; c.z = nz; c.moving = true;
         } else c.moving = false;
+        // aggro: step inside this radius and it charges at once, whichever way it faces
+        if (!playerSafe && d < tune.burrower_aggro) c.noise = tune.wake_noise;
         // sight: in front of it and close, or very close from any side
-        if (!playerSafe && d < tune.burrower_see) {
+        else if (!playerSafe && d < tune.burrower_see) {
           const ahead = (Math.sin(c.face) * (p.x - c.x) + Math.cos(c.face) * (p.z - c.z)) / (d || 1);
           if (ahead > 0.3 || d < tune.burrower_see * 0.4) c.noise += tune.sight_alert * dt;
         }
@@ -1177,7 +1179,7 @@ function syncWorld() {
     for (let k = 0; k < n; k++) {
       const c = v.bits[k]; c.visible = k < s.left;
       const active = k === s.left - 1 && s.shake > 0, frac = s.prog / oreTough(SEAMS[i].type);
-      const pulse = 1 + 0.07 * Math.sin(t * 2.4 + i + k * 1.7);
+      const pulse = 1; // no idle pulse: ore sits still until drilled (retest round 2 feedback)
       const crack = active ? 1 - 0.25 * Math.floor(frac * 3) / 3 : 1; // it cracks in three steps
       c.scale.set(c.userData.s * pulse * crack, c.userData.s * 1.52 * pulse, c.userData.s * pulse * crack);
       c.position.copy(c.userData.p0); // it vibrates under the drill, and never spins

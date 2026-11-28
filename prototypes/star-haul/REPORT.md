@@ -131,6 +131,47 @@ in Unity.
 
 ---
 
+## Tension Retest (2026-11-27): PASSED on round 2, on one run
+
+**Round 1** (the settings above): the designer played and said leaving felt
+easy, a "no". They added that creatures should charge at once when you get too
+close, rather than slowly filling the "something stirs" bar.
+
+**Round 2 tuning** (`config.js`; the old values are noted in its comments):
+
+| Setting | Round 1 | Round 2 |
+|---|---|---|
+| `burrower_aggro` (new): a burrower charges at once inside this radius, whichever way it faces | none | 6 m |
+| `hunter_first` | 150 s | 90 s |
+| `hunter_interval` | 70 s | 45 s |
+| `oxygen_seconds` | 540 s | 420 s |
+| `full_pack_slow` | 20% | 35% |
+
+**Round 2 result**, the designer's answers after one run:
+- Leaving was a hard choice: **yes**.
+- The pack was worth 590.
+- It did not feel too harsh.
+- With the drill stun as the only way to fight back, they were wary of carrying
+  on.
+- They disliked the ore moving on its own when it was not being drilled.
+
+**Verdict:** the kill condition is not met. The tension loop holds, and the
+retest gate before the first `/design-system` run is cleared. **Caveat:** this
+rests on one run, not the three or four this report asked for, and the run
+length was not recorded. More runs would firm it up. Treat the round-2 values as
+the new starting points, in place of the ones listed under "If Proceeding"
+below.
+
+**Notes for later design docs (not acted on here):**
+- *Fighting back.* The wariness is the tension working as intended, and "no
+  weapons in the MVP" stays settled. Record it for the combat and gear docs to
+  weigh.
+- *Ore movement.* The idle pulse on ore pieces has been removed, so ore now sits
+  still and only shakes and cracks under the drill. In the Unity build, ore
+  should not animate when idle; use the glow to make it visible instead.
+
+---
+
 ## If Proceeding
 
 - **Core tuning values (starting points, not proven numbers).** From `config.js`:
