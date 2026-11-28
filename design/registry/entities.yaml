@@ -184,6 +184,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
     category: material
     family: none
     tier: 0
@@ -196,6 +197,7 @@ items:
     source: design/gdd/ore-and-item-economy.md
     referenced_by:
       - design/gdd/ore-and-item-economy.md
+      - design/gdd/home-valley.md
     category: material
     family: none
     tier: 0
@@ -213,6 +215,30 @@ items:
     tier: 0
     worth: 0
     stack_max: 2
+    added: 2026-11-28
+    revised: ""
+  - name: gatherable.rock
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    category: gatherable
+    gives: material.rock
+    yield: 3
+    regrow_s: 600
+    spots_in_layout: 24
+    added: 2026-11-28
+    revised: ""
+  - name: gatherable.stick
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    category: gatherable
+    gives: material.stick
+    yield: 3
+    regrow_s: 600
+    spots_in_layout: 24
     added: 2026-11-28
     revised: ""
 
@@ -269,6 +295,37 @@ formulas:
     output_range: [0, 999999]
     expression: "sum(count * worth(id)) / pacing_haul_worth"
     notes: "F4. Validation-time report only. Bands: recurring cost <= 0.25 runs, one-off 0.5 to 3, ceiling 15 to 30 runs. Building and Crafting price against it."
+    added: 2026-11-28
+    revised: ""
+  - name: rebuild_stock_ok
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    variables:
+      - stock
+      - need
+      - rebuild_margin
+    output_range: [false, true]
+    expression: "stock(m) >= ceil(need(m) * rebuild_margin); stock(m) = sum of yield over spots giving m"
+    notes: "F3. Validation refuses the catalog when false. need comes from Crafting and Building's rebuild set (workbench, hammer, basic drill, one shelter repair); provisional 40 rock and 40 stick until they define it. MVP stock 72 each, margin 1.25."
+    added: 2026-11-28
+    revised: ""
+  - name: rebuild_gather_time
+    status: active
+    source: design/gdd/home-valley.md
+    referenced_by:
+      - design/gdd/home-valley.md
+    variables:
+      - need
+      - yield
+      - t_pick
+      - d_hop
+      - d_home
+      - walk_speed
+    output_range: [0, 7000]
+    expression: "sum over m of ceil(need(m)/yield(m)) * (t_pick + d_hop/walk_speed) + 2*d_home/walk_speed"
+    notes: "F4. Validation warning above valley_gather_time_max_s (300 s, half the concept's 10-minute rebuild). t_pick is Gathering's, walk_speed Player Controller's. About 103 s with MVP values."
     added: 2026-11-28
     revised: ""
 
