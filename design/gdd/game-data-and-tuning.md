@@ -1,9 +1,9 @@
 # Game Data & Tuning
 
-> **Status**: In Review (revision 2, 2026-11-28, after the second `/design-review`, verdict NEEDS REVISION; awaiting re-review)
+> **Status**: In Review (revision 3, 2026-11-28, after the third `/design-review`, verdict NEEDS REVISION; awaiting re-review)
 > **Creative Director Review (CD-GDD-ALIGN)**: APPROVED 2026-11-27 (run in-session by `/design-system` as a checklist, no agent spawned; autonomous mode). Senior review in `/design-review`: NEEDS REVISION 2026-11-27 and again 2026-11-28, see `design/gdd/reviews/game-data-and-tuning-review-log.md`
 > **Author**: designer + Claude (design-system, autonomous mode)
-> **Last Updated**: 2026-11-28 (revision 2)
+> **Last Updated**: 2026-11-28 (revision 3)
 > **Last Verified**: 2026-11-27
 > **Implements Pillar**: Pillar 2 (Risk is a choice), Pillar 3 (Bright world, real stakes); serves every pillar indirectly
 
@@ -68,7 +68,7 @@ Two supporting lines follow from the same guarantee:
   on its second round because every number in the browser prototype could be
   changed while playing. The Unity build keeps that: in a development build the
   designer can change a tuning value mid-session and feel the result on the next
-  frame, then keep it.
+  Simulation tick (or as soon as the game unpauses), then keep it.
 
 What this asks of the rest of the design: no system may hide a number in code
 or in a scene, and no system may treat a tuning value as something the player
@@ -95,6 +95,11 @@ taken on the designer's behalf and is listed in Open Questions.
 recipe, creature, storm strength) or a *tuning value* (a number or switch a
 rule reads). Nothing else is game data. Save contents, player progress and
 settings are not game data: they belong to Save & Load and Menus & Settings.
+Build and development settings (such as the live tuning switch) are not game
+data either: they are not in the catalog and not fingerprinted. **Performance
+budgets and test budgets are not game data**: a load-time budget, a save-size
+budget or a frame budget lives in the owning design doc and in the test that
+measures it, never in a tuning set, since no rule of the game reads it.
 
 Where a number belongs: a number that describes **one thing** (a creature's
 speed and bite, an ore's toughness and worth, a recipe's input counts) is a
@@ -104,14 +109,23 @@ value*. A family of keys with one entry per thing (`tough_*`, `value_*`,
 `burrower_*`, `spitter_*`) is a sign the numbers belong on definitions;
 recipe costs (`drill2_*`, `canister_*`) are `recipe` definitions, not tuning.
 Every numeric definition field is checked by the same formula as a tuning
-value (D1), so moving a number between the two never loosens its checks. A
-definition field's range, unit and step are written **once per kind and
-field**, not on each definition: each kind that has numeric fields has a
-*limits set* `tuning.<kind>_limits` (for example `tuning.ore_limits`), owned
-by the kind's owner, holding one R3 record per numeric field (its `value` is
-the default shown to authors, and is not read by any rule). Each definition
-then holds only the numbers themselves, so no single ore can widen its own
-range.
+value (D1), so moving a number between the two never loosens its checks.
+
+**Field-limits records.** A definition field's range, unit and step are
+written **once per kind and field**, not on each definition, in a third kind
+of record that is neither a definition nor a tuning set: the *field-limits
+record*. Each kind that has numeric fields of its own has one, with the id
+`limits.<kind>` (for example `limits.ore`), owned by the kind's owner. The
+numeric shared holdable fields (`stack_max`, `worth`, `tier`, R2) are limited
+once, in the shared record `limits.holdable`, owned by Ore & Item Economy, and
+apply to every holdable kind; `limits.<kind>` holds only that kind's other
+numeric fields, so no field is limited twice. For each field a limits record
+holds `type`, `min`, `max`, optional `step` and `unit`, with the same rules as
+R3, and **no `value`**: the default shown to authors is an editor hint in the
+owner's schema, never data. Limits records are rules data: they are checked by
+R9 and fingerprinted (D4). They are **restart-only**: never live-tunable, never
+changed by R12, never shown as editable on the panel. Each definition holds
+only its numbers, so no single ore can widen its own range.
 
 A tuning value that a player may adjust (look sensitivity, a stick dead
 zone) is the **designer's default**. Menus & Settings stores the player's own
@@ -148,13 +162,19 @@ player, and the player's setting is never game data.
 | `gatherable` | Things picked up in the valley (rock and stick nodes) | Home Valley / Gathering |
 | `zone` | Asteroid zones | Asteroid World |
 | `tuning` | Tuning sets (R4) | Each owning system |
+| `limits` | Field-limits records (R1): `limits.<kind>` for one kind's own numeric fields, `limits.holdable` for the shared holdable fields | Each kind's owner; `limits.holdable` is owned by Ore & Item Economy |
+
+Valley layout spots (where nodes and the shelter site sit) are not a kind:
+they are scene content owned by Home Valley.
 
 **Fields shared across kinds.** The *holdable* kinds (`ore`, `material`,
 `item`, `tool`, `gear`) all carry four common fields, `stack_max`, `worth`,
 `family` and `tier`, because every container treats them alike. Ore & Item
 Economy owns those four fields on every holdable kind; the kind's owner in the
 table above owns every other field (Tools & Gear owns a drill's power, not its
-`stack_max`). No other field is shared between owners.
+`stack_max`). No other field is shared between owners. The numeric ones among
+them (`stack_max`, `worth`, `tier`) are limited in `limits.holdable` (R1);
+`family` is an enum.
 
 Examples consistent with the ADRs: `ore.cobalt`, `tool.drill.basic`,
 `piece.wall.stick`, `recipe.drill.better`, `tuning.storms`. The ore names in
@@ -169,8 +189,8 @@ carries:
 | `key` | snake_case, unique inside its tuning set |
 | `type` | `int`, `float` or `bool`. A `float` is parsed straight into a 64-bit double and stays a double everywhere in the catalog, the panel and the fingerprint; no value is ever held as a 32-bit float |
 | `value` | the number in use (for `bool`, true or false) |
-| `min`, `max` | the safe range the owning design doc gives; required for `int` and `float`; `min ≤ value ≤ max` (formula D1). Written with at most 9 decimal places |
-| `step` | the increment the development tuning panel uses; optional; at least 10⁻⁹ and at most 9 decimal places. When absent, the *effective step* is used: for `float`, (`max − min`) / 100; for `int`, max(1, round_half_up((`max − min`) / 100)). The effective step is checked by D1 like a written one. When `min = max` there is no step and the value is read-only on the panel |
+| `min`, `max` | the safe range the owning design doc gives; required for `int` and `float`; `min ≤ value ≤ max` (formula D1). Written with at most 9 decimal places, counted from the text as written (D1) |
+| `step` | the increment the development tuning panel uses; optional; at least 10⁻⁹ and at most 9 decimal places. When absent, the *effective step* is used: for `float`, exactly (`max − min`) / 100, worked on scaled integers (D1); for `int`, max(1, round_half_up((`max − min`) / 100)) in 64-bit integers. The effective step is checked by D1 like a written one. When `min = max` there is no step and the value is read-only on the panel |
 | `unit` | one of the fixed units in R5, allowed for this `type` (R5 table) |
 | `owner` | the system whose design doc defines the value's meaning; written once per tuning set and inherited by its values |
 | `apply` | when a live change takes effect (R12): `live` (next Simulation tick), `next_run` (at the next run launch or return home) or `restart` (pending until the game restarts). Optional, default `live`; the owning design doc sets `next_run` or `restart` for any value whose change would contradict state already built from it, and gives the reason in the rationale. A system that precomputes something from a value at construction (a lookup table, a grid) marks that value `restart` unless its design doc says how it rebuilds on a live change |
@@ -182,9 +202,15 @@ two keys of the same set, each written `key op key` with `op` one of `<`,
 `≤`, `=`, `≥`, `>` (for example `walk_speed ≤ sprint_speed`,
 `interval_min_s ≤ interval_max_s`). Both keys of a constraint must be
 numeric and of the same unit, and `=` is allowed only between `int` values.
-Constraints are checked by R9 on the values in use, and again whenever live
-tuning makes a new revision (R12). A rule between values of different sets is
-not allowed (R4: one owner per value).
+Constraints are checked by R9 (check 9a that each is well formed, check 9b
+that it holds) on the values in use, and again whenever live tuning makes a
+new revision (R12). Data holds only constraints within one set (or within one
+definition, R9). **A rule between values of different sets or systems is not
+data** (R4: one owner per value): it is an owner-written CI test, an EditMode
+test that reads the loaded catalog, kept outside the catalog, and it may be
+advisory (for example Save & Load's retry product, or Home Valley's checks
+across systems). The runtime catalog has only pass and fail: there is no
+warning tier and no validation-driven `apply` mode.
 
 This is the browser prototype's `config.js` shape (value, min, max, step),
 kept because it worked, with unit, owner, apply and rationale added so a
@@ -194,7 +220,9 @@ number can never lose its reason.
 owning system, with the id `tuning.<system>` (for example `tuning.oxygen`,
 `tuning.storms`). `<system>` is the system's name from the systems index in
 snake_case (`tuning.player_controller`, `tuning.tools_and_gear`). A system
-reads only its own set.
+reads only its own set. Field-limits records (`limits.*`, R1) are not tuning
+sets: they hold no values, and their field names are not tuning keys, so the
+two-sets rule below does not apply to them.
 
 **One owner per value.** Every value lives in exactly one set. If another
 system needs it, either for display (Run HUD showing the oxygen tank size) or
@@ -219,8 +247,10 @@ Each unit allows only certain types and signs; D1 checks them against `min`
 | Time, duration | `s` (seconds) | float | min ≥ 0 | Including long ones: the storm interval is 3,000 to 4,200 s. Systems that keep milliseconds convert by formula D3 |
 | Distance | `m` | float | min ≥ 0 | |
 | Speed | `m_per_s` | float | min ≥ 0 | |
-| Angle | `rad` | float | any | |
-| Turn rate, look sensitivity | `rad_per_s`, `rad_per_px` | float | min ≥ 0 | |
+| Acceleration | `m_per_s2` | float | min ≥ 0 | Metres per second squared |
+| Angle | `deg` | float | any | Degrees are the only angle unit in data. Designers author degrees; code converts to radians once, at load, as a constant conversion (R6) |
+| Turn rate | `deg_per_s` | float | min ≥ 0 | |
+| Look sensitivity | `deg_per_px` | float | min ≥ 0 | Degrees of turn per pixel (or per raw input count; Input's design doc says which) |
 | Fraction of something | `share` | float | 0 ≤ min, max ≤ 1 | Never percent |
 | Multiplier | `multiplier` | float | min > 0 | 1 means no change |
 | Health and damage | `hp`, `hp_per_s` | float or int | min ≥ 0 | |
@@ -234,7 +264,9 @@ Each unit allows only certain types and signs; D1 checks them against `min`
 There is no catch-all unit. A quantity none of these fits is a change to this
 table, made in this document, so unit checks keep their meaning. An owner that
 truly needs a negative value for a unit marked `min ≥ 0` cannot have one
-without changing this table.
+without changing this table. Unit tokens are written exactly as in the table
+(`m_per_s`, never `m/s`). There is no size unit: a size is a distance (`m`) or
+a count.
 
 `int` values, mins, maxes and steps lie within −2,147,483,648 to
 2,147,483,647 (a 32-bit integer).
@@ -245,7 +277,8 @@ a scene or in a prefab. The only numbers that stay in code are *constants*:
 format version numbers, unit conversions (1,000 ms in a second), mathematical
 constants, and engine plumbing that is not gameplay (layer masks, buffer
 sizes). An owning design doc marks such a number `constant` in its Formulas
-variable table, so the exception is visible.
+variable table, so the exception is visible. Performance and test budgets are
+not tuning values either (R1): they live in the owning design doc and its test.
 
 **R7. Definitions refer to each other by id only.** A recipe lists its inputs
 and output as item ids and counts; a piece lists its cost as material ids and
@@ -276,13 +309,19 @@ Play Mode ends. The catalog is an instance owned by the session start-up code,
 never a static or global, so it is rebuilt cleanly each time the game starts
 or Play Mode is entered.
 
-**Start-up does not depend on a scene.** The catalog is built by start-up code
-that runs whichever scene Play Mode or the player starts in (the editor's Play
-button is often pressed in the valley or an asteroid scene, not the start-up
-scene), and schemas hold no mutable static state. Entering Play Mode with
-domain reload turned off therefore still builds a fresh catalog each time,
-with nothing left over from the last session. How the bootstrap is hooked in
-is ADR-0004's.
+**Start-up does not depend on the first scene.** The catalog is built by the
+bootstrap (R11), which runs whichever scene Play Mode or the player starts in
+(the editor's Play button is often pressed in the valley or an asteroid scene,
+not the start-up scene), and schemas hold no mutable static state. Entering
+Play Mode with domain reload turned off therefore still builds a fresh catalog
+each time, with nothing left over from the last session. The bootstrap's shape
+is fixed in R11; ADR-0004 records the implementation.
+
+**Data assets are checked when saved in the editor.** Saving a data asset in
+the editor runs R9 on the catalog with that asset in place and shows any
+failure records at once, so fail-hard start-up (R9) rarely surprises the
+designer. It is a convenience: it never blocks the save, and start-up and CI
+still run the full check.
 
 **R9. Validation.** Before the catalog becomes ready, every rule below is
 checked, and **every** failure is collected (not just the first).
@@ -292,15 +331,18 @@ in its own code, a *schema*: the list of keys its tuning set must hold, and
 for each kind of definition it owns, the list of fields with their type and,
 for a field that refers to another definition, the kind it must refer to (a
 recipe's inputs and output refer to `ore`, `material` or `item`). A field's
-type is one of: `int`, `float` or `bool` (numbers checked against the kind's
-limits set, R1); `enum` with its closed list of names (a family: `amber`,
+type is one of: `int`, `float` or `bool` (numbers checked against the field's
+limits record, R1; the schema's type must equal the limits record's `type`);
+`enum` with its closed list of names (a family: `amber`,
 `teal`, `none`); `id` with the kind or kinds it must refer to; `list` of one
 of these; or `record`, a fixed set of named fields of these types (a recipe
 input `{id, count}`). A schema may also declare constraints between numeric
 fields of one definition (a creature's `see_m ≤ leash_m`), written like R3's
-set constraints. A schema holds names, types and kinds only, never a number:
-the numbers, ranges, units and rationale live in data (definition fields'
-ranges in the kind's limits set, R1). Validation compares the data against
+set constraints. A schema holds names, types and kinds only, never a rule
+number: the numbers, ranges, units and rationale live in data (definition
+fields' ranges in their limits records, R1). The one number a schema may carry
+is an author default, an editor hint that no rule reads and that is not
+fingerprinted. Validation compares the data against
 these schemas. The schema is what the owner's code reads, so a key can never be
 present in code but missing in data, or the other way round, without
 failing here.
@@ -321,22 +363,48 @@ wrongly reusing that id was already reported at check 3:
 2. **Ids**: every id is well formed (R2), of a kind in R2's list, and unique
    across the whole catalog.
 3. **Retired**: no id appears on the retired list (R14).
-4. **Fields**: every definition has every field its owner's schema requires,
-   no field its schema does not declare, and each field of the declared type;
-   and every tuning record has the fields R3 requires for its type (`type`;
-   `min`, `max` and `unit` for numbers; an inherited `owner`; an `apply` that
-   is one of the three; a non-empty `rationale` once `provisional` is false).
+4. **Fields and types**: every definition has every field its owner's schema
+   requires, no field its schema does not declare (a definition that writes
+   its own `min`, `max`, `step` or `unit` fails here), and each field of the
+   declared type; every tuning record has the fields R3 requires for its type
+   (`type`; `min`, `max` and `unit` for numbers; an inherited `owner`; an
+   `apply` that is one of the three; a non-empty `rationale` once
+   `provisional` is false); every limits record field has `type`, `min`,
+   `max` and `unit` and no `value`; each schema field's type equals its
+   limits record's `type`; an enum value is one of its list. **A number is of
+   its type here**: an `int` value, min, max or step that is not a whole
+   number (2.5) fails check 4, for tuning values and definition fields alike.
 5. **References**: every id a definition refers to exists, is not retired,
    and is of the kind the schema expects for that field.
-6. **Tuning keys**: every key the owner's schema declares is present in its
-   set, keys are unique within the set, no set holds a key its schema does
-   not declare (an unknown key is an error, not a warning: a misspelt key is
-   the commonest data bug and would otherwise leave the real value at its old
-   number), and no key name appears in two sets (R4).
+6. **Keys and limits**: every key the owner's schema declares is present in
+   its set, keys are unique within the set, no set holds a key its schema
+   does not declare (an unknown key is an error, not a warning: a misspelt key
+   is the commonest data bug and would otherwise leave the real value at its
+   old number), and no tuning key name appears in two tuning sets (R4); every
+   numeric definition field has exactly one limits entry (in `limits.<kind>`,
+   or in `limits.holdable` for a shared holdable field), and no limits record
+   holds a field its kind's schema does not declare. A shared holdable field
+   is limited only in `limits.holdable`, so it is never reported as a
+   duplicate.
 7. **Units**: every unit is one of R5's and allowed for the value's type.
 8. **Values**: every tuning value and numeric definition field passes formula
-   D1, including its effective step (R3).
-9. **Constraints**: every `constraints` rule of every set holds (R3).
+   D1 (range, unit sign, step and the 32-bit and magnitude bounds), including
+   its effective step (R3); a definition field is checked against its limits
+   record, and the record names the definition and the field. Type (whole
+   number or not) is already settled by check 4.
+9. **Constraints**, in two parts:
+   - **9a Well formed**: every set constraint names two keys that exist in
+     that set, are numeric and share a unit, and uses `=` only between `int`
+     keys; every in-definition constraint in a schema is well formed the same
+     way against the kind's fields. A bad constraint gives one 9a record and
+     is then skipped at 9b. A constraint naming a key that failed check 6 is
+     skipped, not reported again. A constraint naming a key of another set is
+     malformed (an unknown key): rules across sets are CI tests (R3).
+   - **9b Holds**: every well-formed set constraint holds on the values in
+     use, and every well-formed in-definition constraint holds on every
+     definition of the kind (a creature with `see_m` 30 and `leash_m` 20
+     breaks `see_m ≤ leash_m`); the record names the set or the definition,
+     and both keys or fields.
 10. **Release only**: in a release-candidate build, no value is
     `provisional` (R3). A *release-candidate build* is one made by the
     release step (any build meant for players outside the team, external
@@ -344,9 +412,14 @@ wrongly reusing that id was already reported at check 3:
     so a provisional value fails the build itself rather than showing testers
     an error screen.
 
-Each failure is reported as a structured record (check number, data asset,
-id or set, field or key, and a message), so tests compare records, not
-wording; the data error screen and the log print the message.
+Each failure is reported as a structured record (check number, data assets,
+ids or sets, fields or keys, any extra typed fields such as a retired id's
+`retired_in` build, and a message), so tests compare records, not wording; the
+data error screen and the log print the message. The asset, id-or-set and
+field-or-key fields are **lists**, since one failure can name two of each (a
+duplicate id in two assets, a constraint between two keys). An unreadable
+asset is mapped to the set or definitions it should hold by the generated data
+asset list (R11), so check 1 can name them.
 
 **If any check fails, the game does not start.** It shows the data error
 screen (UI Requirements) with the full list, and writes it to the log. There
@@ -369,8 +442,11 @@ host's Simulation tick: Input (`tuning.input`) and Player Controller
 frame on each player's own machine because movement is owner-authoritative
 (ADR-0001). The Authority layer hands them their values the same way, as plain
 values from the catalog revision it publishes. When live tuning makes a new
-revision (R12), the host publishes it and these readers switch to the new
-values in the frame it arrives; there is no second path for them.
+revision (R12), the host publishes it and these readers pick up the published
+revision at the start of their own next update; there is no second path for
+them. A revision is published **inside one process only**: live tuning is
+solo-only (R12), so a revision never crosses the network, and in co-op every
+peer runs revision 1 of its own build.
 
 **R11. Release builds read only their own build content.** In a release build
 the catalog is built only from data that shipped as part of the build. The game
@@ -380,9 +456,11 @@ updates (for example an Addressables content update) never carry rules data,
 so the fingerprint (R13) always identifies the build. This removes any
 supported way for a player to change tuning (anti-pillar: no gear granted
 outside play) and lets co-op peers compare catalogs. Live tuning (R12) is
-gated at compile time: its panel and change path exist only in the editor and
-development builds, and are not compiled into a release player at all; no
-data value can turn them on. The list of data assets the catalog reads is
+gated at compile time (`#if UNITY_EDITOR || DEVELOPMENT_BUILD`): its panel and
+change path exist only in the editor and development builds, and are not
+compiled into a release player at all. Inside those builds a development
+setting, kept outside the catalog and not fingerprinted, can switch it off; no
+game data value turns it on or off. The list of data assets the catalog reads is
 generated from the data folder, and a CI check fails if a data asset is
 missing from it or is assigned to an Addressables group. It is **not**
 tamper-proofing: a player who edits the installed build's own files can
@@ -390,9 +468,14 @@ change it, and defending against that is out of scope for this system (see
 Edge Cases, Degenerate strategies).
 
 **Loading does not depend on Addressables.** The catalog's data and everything
-the data error screen needs (its UI, font and text) are reached directly from
-the start-up scene, not through Addressables or any other loader that can
-itself fail, so a loading failure can always be shown. The error screen's text
+the data error screen needs (its UI, font and text) are **reached by the
+bootstrap without Addressables** or any other loader that can itself fail, so
+a loading failure can always be shown. The bootstrap is a
+`RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)`
+hook that additively loads a *bootstrap scene*, which is in the build's scene
+list; that scene holds direct references to the catalog loader's data asset
+list and to the data error screen. So the same path runs whichever scene the
+game or Play Mode starts in. There is no `Resources` exception. The error screen's text
 is fixed English in code, since localisation also loads through Addressables.
 Addressables may serve the display view's icons, meshes and sounds, loaded
 when needed; the catalog becomes Ready without waiting for any display asset.
@@ -406,29 +489,40 @@ playing, from the development tuning panel:
    and refuses an invalid value with the reason shown on the panel;
 3. valid requests wait in the Authority layer's single **change queue**
    (Session & Authority's request queue). At the start of each Simulation
-   tick, every request queued since the last tick is applied in arrival order
-   as **one** new revision: the catalog becomes revision n+1 (a new immutable
+   tick, the requests queued since the last tick are taken in arrival order
+   and **each is checked against the revision built from the requests
+   accepted before it in the same tick** (D1 and every constraint of its
+   set). A request that fails is refused with the reason shown on the panel
+   and logged, and does not count: later requests are checked as if it had
+   never been made. Among accepted requests to the same key, the later one
+   wins. Example, with walk 5, sprint 6 and `walk_speed ≤ sprint_speed`:
+   "sprint → 8", "walk → 7", "sprint → 6" in one tick: the first two are
+   accepted (walk 7 ≤ sprint 8); the third is refused, because with walk 7
+   already accepted, sprint 6 would break the constraint; the tick applies
+   walk 7 and sprint 8. The accepted requests are applied together as
+   **one** new revision: the catalog becomes revision n+1 (a new immutable
    catalog; revision n is not changed) and each affected owning system is
    handed its new tuning set, or the single values passed from it (R4), and
-   the readers outside the Simulation get it as R10 says. If two requests
-   change the same key in one tick, the later one wins. **The combined
-   revision is checked again** (D1 and every constraint of each changed set)
-   before it is applied: a request that would break a rule together with the
-   ones before it is refused with the reason shown on the panel and logged,
-   and the rest still apply. The systems' state (oxygen left, pieces built,
-   the storm clock) is kept. While no tick runs (paused, waiting on a save,
-   in a menu), requests stay queued and the panel shows them as "queued
-   (paused)";
-4. a value marked `apply: next_run` is queued but held until the next run
-   launch or return home, and is checked again with the catalog of that
-   moment when it is applied; one marked `apply: restart` is never applied in
-   the session: the panel shows it as pending, and it takes effect only if
-   "keep" writes it and the game restarts;
+   the readers outside the Simulation get it as R10 says. If every request
+   is refused, no revision is made. The systems' state (oxygen left, pieces
+   built, the storm clock) is kept. While no tick runs (paused, waiting on a
+   save, in a menu), requests stay queued and the panel shows them as
+   "queued (paused)";
+4. a value marked `apply: next_run` passes step 3's check when it is made
+   and is then held until the next run launch or return home. At that moment
+   it is **checked again** (D1 and its set's constraints) against the catalog
+   of that moment; if it now breaks a rule (because a `live` change to a
+   partner key was applied meanwhile) it is refused with a check-9b (or D1)
+   record shown on the panel and logged, and the rest still apply. A held
+   `next_run` change is discarded, and the discard logged, when a join is
+   accepted. One marked `apply: restart` is never applied in the session: the
+   panel shows it as pending, and it takes effect only if "keep" writes it
+   and the game restarts. Limits records (R1) are never changed live;
 5. every change is written to the log as a structured event: set, key, old
    value, new value, revision;
-6. live values are never written to the save, and a save records no catalog
-   revision or fingerprint, so loading a save never depends on what was tuned
-   live. Live values are lost on restart, unless the designer uses the
+6. **a save carries no tuning values and no revision.** A fingerprint may
+   appear in the save's `writtenBy` as a diagnostic and is never read by any
+   rule, so loading a save never depends on what was tuned live. Live values are lost on restart, unless the designer uses the
    editor's "keep" action, which writes the value back into the data asset
    (editor only, as the prototype's panel wrote back to `config.js`).
    **"Keep" checks before it writes**: it runs D1 and the set's constraints
@@ -438,8 +532,11 @@ playing, from the development tuning panel:
    the set at once. So "keep" can never save data that will not start.
    Loading a save inside a session keeps the session's live values;
 7. the panel's "reset" for a set returns its values to those of revision 1
-   (the catalog as loaded at start-up), as one live change; it never reads
-   the authoring assets again (R8).
+   (the catalog as loaded at start-up); it never reads the authoring assets
+   again (R8). **Reset follows each key's `apply`**: its `live` keys revert
+   as one request at the next tick (one revision), its `next_run` keys revert
+   at the next run launch or return home (and any held `next_run` change to
+   them is dropped), and its `restart` keys only clear their pending mark.
 
 Only tuning values can change live. Definitions (items, pieces, recipes) never
 change during a session: a saved item or piece must never point at a
@@ -448,7 +545,8 @@ builds, or in any session with more than one player. A join request goes
 through the same queue, so a join and a live change in the same tick are
 handled in arrival order: the join is refused if the session's current
 fingerprint differs from that of revision 1 when it is handled (Edge Cases),
-so a set reset to its loaded values does not lock joins out.
+so a set reset to its loaded values does not lock joins out. When a join is
+accepted, every held `next_run` change is discarded (step 4).
 
 **R13. Every build's catalog has a fingerprint** (formula D4), shown on the
 data error screen and in the development panel, and written to the log at
@@ -501,7 +599,7 @@ The catalog has one lifecycle per application run.
 | Loading | Validating | All data read | A data asset that cannot be read at all is recorded as a validation failure, so it reaches Failed through Validating |
 | Validating | Ready (revision 1) | Every check passes | Fingerprint computed (D4) and logged |
 | Validating | Failed | Any check fails | Terminal for this run: the only exit is quitting the game |
-| Ready (n) | Ready (n+1) | A valid live tuning change at a tick boundary | Development builds, solo sessions only (R12). Fingerprint recomputed and shown as modified |
+| Ready (n) | Ready (n+1) | At least one live tuning request accepted at a tick boundary, or a held `next_run` change applied | Development builds, solo sessions only (R12). Fingerprint recomputed; shown `modified` only when it differs from revision 1's (a reset back to the loaded values is not modified) |
 | Ready (n) | Unloaded | Application quit | |
 
 No other transition exists. In particular there is no Ready to Loading
@@ -512,7 +610,9 @@ No other transition exists. In particular there is no Ready to Loading
 `ISaveQueue.LoadAndWait()` (ADR-0003), because the session's Simulation
 systems are built from it and the loaded save names content by id. This is
 enforced, not a convention: the start-up code awaits Ready before it calls
-either, and both refuse to run (with an error naming the caller) if the
+either, asking the **catalog guard** (a small start-up object that answers
+"may a session start / may a save load" from the catalog's state, yes only in
+Ready), and both refuse to run (with an error naming the caller) if the
 catalog is not Ready. If the catalog reaches Failed, neither is ever called. Save
 migrations do not read the catalog: they are pure functions on the save
 document (ADR-0002), so they stay correct as the catalog changes between
@@ -522,12 +622,13 @@ versions.
 
 | System | Direction | What flows | Who owns the interface |
 |---|---|---|---|
-| Session & Authority | Out | Authority layer loads the catalog, builds each Simulation system with its tuning set and definitions (R10), applies live tuning through its request queue (R12), publishes the catalog revision, compares fingerprints from Tier 2a (R13) | This system defines the catalog and its rules; Session & Authority owns the loading, queue and hand-over code path |
-| Ore & Item Economy | Out | `ore`, `material`, `item` definitions and the four holdable fields on `tool` and `gear` (R2); `tuning.ore_and_item_economy` (pacing report values). Worth is a field on each definition (R1), and each container's size belongs to the system that owns the container | Ore & Item Economy owns the fields and values; this system owns ids and validation |
-| Input | Out | `tuning.input`, read every frame on each player's machine; new values the frame a new revision arrives (R10) | Input |
-| Home Valley, Gathering | Out | `gatherable` definitions; their tuning sets (respawn, yields) | Owners |
-| Player Controller | Out | `tuning.player_controller` (walk and sprint speed, look sensitivity), plus Pack's `full_pack_slow` passed in (R4). Read on every peer, since movement is owner-authoritative; new values the frame a new revision arrives (R10) | Owner |
-| Save & Load | Out | Retired list and id lookup (known, retired or unknown, R14) for checking a loaded save; `tuning.save_and_load` (play-time note interval, about 30 s, ADR-0003) | Save & Load decides what to do with each answer; this system only answers |
+| Session & Authority | Out | Authority layer loads the catalog, builds each Simulation system with its tuning set and definitions (R10), applies live tuning through its request queue (R12), publishes the catalog revision, compares fingerprints from Tier 2a (R13); reads its own `tuning.session_and_authority` (tick rate and the like) | This system defines the catalog and its rules; Session & Authority owns the loading, queue and hand-over code path |
+| Ore & Item Economy | Out | `ore`, `material`, `item` definitions and the four holdable fields on `tool` and `gear` (R2); `limits.holdable` and `limits.ore` (R1); `tuning.ore_and_item_economy` (pacing report values). Worth is a field on each definition (R1), and each container's size belongs to the system that owns the container | Ore & Item Economy owns the fields, limits and values; this system owns ids and validation |
+| Every kind's owner | Out | Its `limits.<kind>` record (R1): min, max, step, unit and type per numeric field, restart-only, fingerprinted | Owner writes it; this system checks it (R9 checks 4, 6, 8) |
+| Input | Out | `tuning.input`, read every frame on each player's machine; picks up a new revision at the start of its next update (R10) | Input |
+| Home Valley, Gathering | Out | `gatherable` definitions; their tuning sets (respawn, yields). Valley layout spots are scene content owned by Home Valley, not data here; its checks across systems are its own CI tests (R3) | Owners |
+| Player Controller | Out | `tuning.player_controller` (walk and sprint speed, look sensitivity in `deg_per_px`, turn rate in `deg_per_s`, accelerations in `m_per_s2`), plus Pack's `full_pack_slow` passed in (R4). Read on every peer, since movement is owner-authoritative; picks up a new revision at the start of its next update (R10) | Owner |
+| Save & Load | Out | Retired list and id lookup (known, retired or unknown, R14) for checking a loaded save; `tuning.save_and_load` (play-time note interval, about 30 s, ADR-0003). Its retry-product rule is its own CI test (R3); its size budget is a test budget, not tuning (R1); the fingerprint may sit in `writtenBy` as a diagnostic (R12 step 6) | Save & Load decides what to do with each answer; this system only answers |
 | Tools & Gear | Out | `tool`, `gear` definitions; `tuning.tools_and_gear` | Owner |
 | Building | Out | `piece` definitions with their costs (material ids and counts) and condition rules; `tuning.building` | Building owns the piece list and costs (systems index TD note); this system validates the ids they refer to |
 | Stash, Crafting | Out | Their container sizes (in their own tuning sets, following Ore & Item Economy's container rule); `recipe` definitions; their tuning sets | Owners |
@@ -552,14 +653,46 @@ The `is_valid_value` formula is defined as:
 
 For `type = int` or `float`:
 
-`is_valid_value = finite(value, min, max, max − min) ∧ (min ≤ max) ∧ (min ≤ value ≤ max) ∧ unit_allows(unit, type, min, max) ∧ (type = int ⇒ value, min, max are whole numbers within the 32-bit range) ∧ decimals(min), decimals(max), decimals(step) ≤ 9 ∧ (min < max ⇒ 10⁻⁹ ≤ eff_step ≤ max − min ∧ (max − min) / eff_step ≤ 100,000 ∧ (type = int ⇒ eff_step is a whole number)) ∧ (min = max ⇒ step absent)`
+`is_valid_value = finite(value, min, max) ∧ decimals(min), decimals(max), decimals(step) ≤ 9 ∧ decimals(value) ≤ 11 ∧ |V|, |Lo|, |Hi| ≤ 2⁵³ ∧ (Lo ≤ Hi) ∧ (Lo ≤ V ≤ Hi) ∧ unit_allows(unit, type, min, max) ∧ (type = int ⇒ value, min, max within the 32-bit range) ∧ (Lo < Hi ⇒ E ≥ 10^(d − 9) ∧ E ≤ Hi − Lo ∧ E ≥ ceil((Hi − Lo) / 100,000)) ∧ (Lo = Hi ⇒ step absent)`
 
-where `eff_step` is the written `step`, or the default from R3 when absent,
-`unit_allows` is the R5 table's type and range column, and `decimals(x)` is
-the number of decimal places in the shortest decimal text that reads back as
-exactly the same double (computed by a portable routine that never uses the
-runtime's number formatting, which differs between Mono and IL2CPP; D4). The
-100,000 cap keeps the panel's list of positions (D2) small.
+**Everything runs on scaled integers, never on multiplied doubles.**
+
+- `decimals(x)` is counted from the **authored text token** at parse time:
+  the digits after the decimal point, minus a written exponent, never below 0
+  (`"0.1"` → 1, `"0.35"` → 2, `"1200"` → 0, `"1e-9"` and `"0.000000001"` →
+  9; trailing zeros count as written). No shortest-round-trip routine is
+  used. Parsing the token (invariant culture) must give the stored double. A
+  value typed into the panel is a text token too and is counted the same way.
+- From the token's digits the parser builds each number's *scaled integer*
+  exactly, as a 64-bit integer, with no double arithmetic: at scale 10^d,
+  `0.35` with d = 3 is 350.
+- **Scale d.** With a written step, d = max(decimals(min), decimals(max),
+  decimals(step)), and E is the step at scale 10^d. With no step on a
+  `float`: d0 = max(decimals(min), decimals(max)), **d = d0 + 2**, and E =
+  (max − min) at scale 10^d0, which is exactly (max − min) / 100 at scale
+  10^d. With no step on an `int`: d = 0 and E = max(1, round_half_up((Hi −
+  Lo) / 100)), computed in int64 as (Hi − Lo + 50) div 100 when that is at
+  least 1.
+- Lo and Hi are min and max at scale 10^d. V is the value at scale
+  10^d_v, where d_v = max(d, decimals(value)), and Lo and Hi are scaled up to
+  10^d_v for the comparison `Lo ≤ V ≤ Hi` (exact powers of ten in int64).
+- `E ≥ ceil((Hi − Lo) / 100,000)` is the 100,000-position cap, computed by
+  integer division (q = (Hi − Lo) div 100,000, plus 1 if there is a
+  remainder), so no product can overflow. `E ≥ 10^(d − 9)` is "step at least
+  10⁻⁹" (for d < 9 it always holds once E ≥ 1).
+- **Magnitude bound**: every scaled integer is at most 2⁵³ in size. Then it
+  is exact as a double, and one division by 10^d (also exact, d ≤ 11) gives
+  the same double as parsing the decimal text, so the catalog, the panel (D2)
+  and the fingerprint (D4) agree. A range too large for this fails D1.
+- **Range too narrow.** If no step is written and the default E is below
+  10^(d − 9) (the range is narrower than 10⁻⁷), D1 fails with the message
+  `range too narrow; write a step`, blaming the range, not a step nobody
+  wrote.
+- `int` ranges use int64 throughout; whole-number checks are type checks (R9
+  check 4), so a written `int` step is whole before D1 runs.
+
+`unit_allows` is the R5 table's type and range column. The 100,000 cap keeps
+the panel's list of positions (D2) small.
 
 For `type = bool`: `is_valid_value = value ∈ {true, false} ∧ unit = none ∧
 min, max and step are all absent`.
@@ -567,11 +700,17 @@ min, max and step are all absent`.
 **Variables:**
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| value | int / float / bool | any finite number, or true/false | data file | The tuning value in use |
-| min | int / float | any finite number allowed by the unit | data file | Lower end of the safe range, from the owning design doc |
-| max | int / float | any finite number, ≥ min, allowed by the unit | data file | Upper end of the safe range |
-| step | int / float | 0 < step ≤ max − min | data file (optional) | Development panel increment |
-| eff_step | int / float | as step | calculated | `step` if present, else the R3 default (float: (max − min) / 100; int: max(1, round_half_up((max − min) / 100))) |
+| value | int / float / bool | any finite number, at most 11 decimals, or true/false | data file / panel | The tuning value (or definition field) in use |
+| min | int / float | finite, at most 9 decimals, allowed by the unit | data file / limits record | Lower end of the safe range, from the owning design doc |
+| max | int / float | finite, ≥ min, at most 9 decimals, allowed by the unit | data file / limits record | Upper end of the safe range |
+| step | int / float | 10⁻⁹ ≤ step ≤ max − min, at most 9 decimals | data file (optional) | Development panel increment |
+| eff_step | int / float | as step | calculated | `step` if present, else the R3 default; equals E / 10^d |
+| decimals(x) | int | 0 to 9 (min, max, step); 0 to 11 (value) | parsed from the text token | Decimal places as written |
+| d | int | 0 to 11 | calculated | Scale exponent: up to 9 with a written step, d0 + 2 (up to 11) for a default float step, 0 for an int with no step |
+| d_v | int | d to 11 | calculated | max(d, decimals(value)), the scale for the value comparison |
+| Lo, Hi | int (64-bit) | −2⁵³ to 2⁵³ | calculated | min and max at scale 10^d (rescaled to 10^d_v for the value check) |
+| V | int (64-bit) | −2⁵³ to 2⁵³ | calculated | value at scale 10^d_v |
+| E | int (64-bit) | 1 to Hi − Lo | calculated | Effective step at scale 10^d |
 | type | enum | int, float, bool | data file | Kind of value |
 | unit | enum | R5 list | data file | Unit of the value |
 
@@ -582,7 +721,14 @@ not start.
 is no effective step, and the development panel shows the value read-only.
 An `int` range of 0 to 16 with no step gets an effective step of
 max(1, round_half_up(0.16)) = 1, not 0.16. An `int` range of 0 to 1 gets 1,
-which equals max − min and is valid. `value = 0` is valid whenever 0 is
+which equals max − min and is valid. A float range of 0.1 to 0.4 with no step:
+d0 = 1, d = 3, Lo = 100, Hi = 400, E = 4 − 1 = 3, so the effective step is
+exactly 0.003 and there are 100 steps. A float range of 0.1 to 0.3 with step
+0.2: d = 1, Lo = 1, Hi = 3, E = 2 = Hi − Lo, valid (a double subtraction
+0.3 − 0.1 = 0.19999999999999998 would have wrongly failed it). A float range
+of 0 to 10²⁰ fails the magnitude bound (Hi = 10²² > 2⁵³). A float range of 0
+to 0.00000005 with no step: d0 = 8, d = 10, E = 5, below 10^(10 − 9) = 10,
+so it fails with `range too narrow; write a step`. `value = 0` is valid whenever 0 is
 inside the range; whether 0 is sensible (a pack of 0 slots) is the owner's
 range to forbid. NaN and infinities fail `finite`. A value need not lie on
 the step grid; the first panel click snaps it to the grid (D2).
@@ -596,21 +742,25 @@ min` → invalid; the data error screen reads `tuning.oxygen.oxygen_seconds:
 The panel steps along a fixed list of *positions* P, counted from min, worked
 in whole numbers scaled by 10^d so no rounding error can creep in:
 
-`d = max(decimals(min), decimals(max), decimals(eff_step))` (at most 9, D1)
-`S = 10^d`; `m = min × S`, `M = max × S`, `e = eff_step × S`, each rounded to the nearest whole number (64-bit)
-`k_max = floor((M − m) / e)` (whole-number division)
-`g(k) = (m + k × e) / S` for k = 0 … k_max
-`P = [g(0), g(1), …, g(k_max)]`, followed by `max` if `m + k_max × e < M`
-`i = index of the position in P nearest to value` (an exact tie takes the higher position)
+`d`, `m_lo`, `m_hi`, `e`: D1's scale, Lo, Hi and E, built from the text tokens' digits as 64-bit integers (never min × S on doubles); when the value has more decimals than d, all four are rescaled to d' = max(d, decimals(value)) (D1's d_v), and d means d' below
+`S = 10^d`; `v` = the value at scale S (an exact integer, D1)
+`k_max = (m_hi − m_lo) div e` (whole-number division)
+`g(k) = (m_lo + k × e) / S` for k = 0 … k_max, one exact integer turned into a double and divided once by S
+`P = [g(0), g(1), …, g(k_max)]`, followed by `max` as position k_max + 1 if `m_lo + k_max × e < m_hi`
+`i0 = clamp(round_half_up((v − m_lo) / e), 0, k_max)`, with round_half_up on integers as `(2(v − m_lo) + e) div 2e`
+`i = k_max + 1` if max is an extra position and `2v ≥ (m_lo + k_max × e) + m_hi` (nearer to max, ties up); otherwise `i = i0`
 `live_step_value = P[clamp(i + n, 0, length(P) − 1)]`
 
 Each position is computed from min with one multiplication on whole numbers,
 never by adding steps one after another, and divided by S once at the end. So
 a step of 0.1 gives 0.3, not 0.30000000000000004; a float range of 0 to 1 with
-no written step (effective step 0.01) gets d = 2 and 101 distinct positions;
-and the stored value, the panel and the fingerprint (D4) all see the same
-double. No position can exceed max, because the grid stops at the last whole
-step that fits in the scaled integers.
+no written step gets d = 2, e = 1 (effective step 0.01) and 101 distinct
+positions; and the stored value, the panel and the fingerprint (D4) all see
+the same double, because D1's magnitude bound keeps every scaled integer exact
+in a double. No position can exceed max, because the grid stops at the last
+whole step that fits in the scaled integers. The nearest index is found on
+the integers too: with min 0, max 1, step 0.1 and value 0.15 (d' = 2, m_lo =
+0, e = 10, v = 15), i = round_half_up(15 / 10) = 2, so n = 0 gives 0.2.
 
 `round_half_up` (used for the R3 default step) and the tie rule above both
 round halves **up**, away from min. This is stated because the C# default
@@ -621,11 +771,13 @@ must use `MidpointRounding.AwayFromZero` or equivalent.
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
 | value | int / float | min to max | data file / live | Current value |
-| n | int | −M to +M, M = `live_step_big_multiplier` | calculated | Clicks: ±1 per click, ±M with the modifier key held |
-| eff_step | int / float | 0 < eff_step ≤ max − min | data file / R3 default | Increment |
+| n | int | −B to +B, B = `live_step_big_multiplier` | calculated | Clicks: ±1 per click, ±B with the modifier key held |
+| eff_step | int / float | 10⁻⁹ ≤ eff_step ≤ max − min | data file / R3 default | Increment (e / S) |
 | min, max | int / float | as D1, min < max | data file | Safe range |
-| d | int | 0 to 9 | calculated | Most decimal places among min, max and the effective step (D1's `decimals`) |
-| S, m, M, e | int (64-bit) | m, M within ±9.2 × 10¹⁸ | calculated | Scale factor and the scaled min, max and step |
+| d | int | 0 to 11 | calculated | D1's scale (d0 + 2 for a default float step), raised to decimals(value) when larger |
+| S | int (64-bit) | 1 to 10¹¹ | calculated | 10^d |
+| m_lo, m_hi, e, v | int (64-bit) | −2⁵³ to 2⁵³ (D1's magnitude bound) | calculated | Scaled min, max, step and value |
+| i0, i | int | 0 to k_max + 1 | calculated | Nearest position index (ties go up) |
 | k_max | int | 1 to 100,000 | calculated | Last whole step that fits in the range; exact, since it is whole-number division (0 to 0.3 with step 0.1 gives 3, not 2) |
 | P | list | 2 or more positions | calculated | The grid, plus max as its last position when max is off the grid |
 
@@ -685,10 +837,14 @@ C# number formatting differs between Unity's Mono (editor) and IL2CPP
 (player) runtimes:
 
 1. Every **attribute** of the rules view becomes one record with three names
-   and a value: the entry's id (a definition id, or a tuning set id), the
-   field or key name, and the attribute name (`value`, `min`, `max`, `step`,
-   `unit`, `apply` for a tuning key; `value` for a definition field), then a
-   one-byte type tag and the value.
+   and a value: the entry's id (a definition id, a tuning set id, or a
+   field-limits record id such as `limits.ore`), the field or key name, and
+   the attribute name (`value`, `min`, `max`, `step`, `unit`, `apply` for a
+   tuning key; `min`, `max`, `step`, `unit` for a limits record field;
+   `value` for a definition field), then a one-byte type tag and the value.
+   Limits records are rules data and are always fingerprinted. For a `bool`
+   tuning key, the `min`, `max` and `step` records are **omitted** (no
+   record at all, not tag 0).
 2. Records are sorted by id, then by field or key name, then by attribute
    name, comparing UTF-8 bytes (ordinal; ids, keys and attribute names are
    ASCII, R2 and R3).
@@ -696,25 +852,32 @@ C# number formatting differs between Unity's Mono (editor) and IL2CPP
 
    | Tag | Type | Bytes |
    |---|---|---|
-   | 0 | absent (a `step` not written) | nothing |
+   | 0 | absent (a numeric key's or limits field's `step` not written) | nothing |
    | 1 | int | 8-byte little-endian two's complement |
    | 2 | double | the 8 bytes of its IEEE 754 bit pattern, little-endian, with −0 written as +0 (NaN cannot occur, D1) |
    | 3 | bool | one byte, 0 or 1 |
    | 4 | string (ids, and enum values such as `unit` and `apply` written as their ASCII names) | 4-byte little-endian length, then UTF-8 bytes |
    | 5 | list | 4-byte little-endian count, then each item in the order written in data (list order can carry meaning); an item that is a pair such as a recipe input `{id, count}` is written as its parts in declared order, each with its own tag |
 
-   Names (id, key, attribute) are written as tag 4 strings.
+   Names (id, key, attribute) are written as tag 4 strings. A
+   record-typed field outside a list (R9) is written as its parts in declared
+   order, each with its own tag, exactly as a record inside a list is. All
+   multi-byte integers are written byte by byte with explicit shifts
+   (`(byte)(x >> 8·i)`), never through `BitConverter`, whose byte order
+   follows the machine.
 4. `apply` is always written as its value in use, so an `apply` left at its
    default and one written as `live` give the same bytes; an absent `step`
    is written as tag 0, not as its effective step. The value in use, min,
    max, step, unit and apply are each an attribute, so a change to a range
-   also changes the fingerprint. Rationale, provisional and owner are not
-   rules and are excluded, as is all display data.
+   (a tuning range or a limits record's range) also changes the fingerprint.
+   Rationale, provisional and owner are not rules and are excluded, as are
+   all display data, schema author defaults (R9) and development settings
+   (R11).
 
 **Variables:**
 | Variable | Type | Range | Source | Description |
 |----------|------|-------|--------|-------------|
-| rules_view | catalog | — | calculated | Every definition and tuning value in the rules view (R8); display data is excluded, since a different icon cannot desync a game |
+| rules_view | catalog | — | calculated | Every definition, tuning value and field-limits record in the rules view (R8); display data is excluded, since a different icon cannot desync a game |
 | canonical_bytes | function | — | constant | The byte layout above |
 | SHA256 | function | — | constant | The standard SHA-256 hash; only the first 8 bytes are kept |
 
@@ -727,7 +890,8 @@ bytes), though an empty catalog fails validation for missing keys first. A
 change to any single value, range, id or reference changes the fingerprint; a
 change to display data, rationale or the provisional flag alone does not. The
 order in which entries appear in the data files does not change it (step 2
-sorts them). Live tuning (R12) changes it; the panel marks it `modified`. The
+sorts them). Live tuning (R12) changes it; the panel marks it `modified`
+only while it differs from revision 1's. The
 fingerprint detects mismatched data; it is not a security measure, and 64
 bits are ample for that.
 **Example:** changing `tuning.oxygen.oxygen_seconds` from 420 to 430 changes
@@ -782,7 +946,21 @@ against ADR-0001 to ADR-0003.
   `oxygen_secs`): validation fails. The commonest data bug is a misspelt key
   silently leaving the real value unchanged.
 - **If a `share` value has a range reaching outside 0 to 1**: D1 fails.
-- **If an `int` value, min, max or step has a fraction**: D1 fails.
+- **If an `int` value, min, max or step has a fraction** (2.5): check 4
+  (type) fails, for a tuning value or a definition field alike.
+- **If a float range is too narrow for its default step** (narrower than
+  10⁻⁷ with no step written): D1 fails with `range too narrow; write a step`.
+- **If a range is too large for exact scaled integers** (a float range of 0
+  to 10²⁰): D1's magnitude bound fails.
+- **If a definition field has no limits entry, or a definition writes its own
+  `min`**: check 6 for the missing limits entry; check 4 for the extra field.
+  A definition field above its limits max fails check 8, naming the
+  definition and the field.
+- **If a constraint is malformed** (an unknown key, `=` between floats, keys
+  of different units): one check-9a record; it is not also checked at 9b.
+- **If a rule spans two sets or two systems**: it is not data; the owner
+  writes it as a CI test that reads the loaded catalog (R3). The runtime
+  catalog never warns: it passes or fails.
 - **If an `int` value has no step and a small range** (pack slots 0 to 16):
   the effective step is 1, never a fraction (R3).
 - **If a unit does not suit the type or sign** (a `share` declared `int`, a
@@ -790,7 +968,9 @@ against ADR-0001 to ADR-0003.
   D1 fails (R5 table).
 - **If two values break a constraint of their set** (walk speed 7 with sprint
   speed 6, when the set says `walk_speed ≤ sprint_speed`): validation fails
-  (R9 check 9), naming both keys. A live change that would break it is
+  (R9 check 9b), naming both keys. The same holds inside a definition (a
+  creature with `see_m` 30 and `leash_m` 20): one 9b record naming the
+  definition and both fields. A live change that would break it is
   refused like an out-of-range value.
 - **If a value is still `provisional` in a release-candidate build**:
   validation fails (R9 check 10). Development builds allow it.
@@ -820,16 +1000,29 @@ against ADR-0001 to ADR-0003.
   (R12). A pending waited write (ADR-0003) holds the clock but not tuning; the
   change only affects how future ticks compute. The save being written holds
   no tuning and no revision, so it is the same whichever revision is current.
-- **If several live changes arrive in one tick**: they become one revision,
-  applied in arrival order; a later change to the same key wins (R12).
+- **If several live changes arrive in one tick**: each is checked against the
+  revision built from the requests accepted before it; refused ones do not
+  count; the accepted ones become one revision, and among accepted changes to
+  the same key the later wins (R12). If all are refused, the revision does
+  not change.
+- **If a held `next_run` change no longer fits when its moment comes** (walk
+  → 7 queued `next_run`, then sprint → 6 applied `live`): at the run launch
+  or return home it is re-checked and refused with a check-9b record (R12
+  step 4).
+- **If a join is accepted while a `next_run` change is held**: the held change
+  is discarded and the discard logged.
+- **If the designer resets a set with keys of mixed `apply`**: `live` keys
+  revert at the next tick, `next_run` keys at the next run launch or return
+  home, `restart` keys just drop their pending mark (R12 step 7).
 - **If a save is loaded inside a session that has live changes**: the live
   values stay; the save never carried tuning, so nothing is restored over them.
 - **If a live change alters the storm interval or strength rules**: the next
   storm already scheduled keeps its time and strength (they are saved,
   ADR-0003); the new values apply from the storm after it.
-- **If a live change lowers a capacity below what is in use** (pack slots 16 →
-  10 with 14 items carried): this system applies the value; what happens to the
-  excess is the owning system's edge case (Pack). Owning design docs must say
+- **If a live change lowers a `live` limit below what is in use** (a capacity
+  or count the owner marked `live`, now set under the amount currently held):
+  this system applies the value; what happens to the excess is the owning
+  system's edge case. Owning design docs must say
   what their rules do when a value changes mid-session, or set the value's
   `apply` field (R3) to `next_run` (applied at the next run launch or return
   home) or `restart` (shown pending on the panel, never applied in the
@@ -841,8 +1034,10 @@ against ADR-0001 to ADR-0003.
   loaded values has revision 1's fingerprint again and accepts joins.
 - **If two live changes are each valid alone but break a constraint
   together** (walk 5 and sprint 6, then "sprint → 5" and "walk → 6" in one
-  tick): the combined revision is checked before it is applied (R12); "walk →
-  6" is refused with the constraint's reason, "sprint → 5" applies.
+  tick): "walk → 6" is checked against the revision holding the accepted
+  "sprint → 5" (R12), so it is refused with the constraint's reason and
+  "sprint → 5" applies. With "sprint → 8", "walk → 7", "sprint → 6", the
+  third is refused (walk 7 > sprint 6) and walk 7, sprint 8 apply.
 - **If the designer keeps one value whose constraint partner was changed only
   live**: "keep" refuses, naming the constraint, and offers "keep set" (R12
   step 6).
@@ -850,8 +1045,8 @@ against ADR-0001 to ADR-0003.
   is made**: it waits in the queue, the panel shows "queued (paused)", and it
   applies on the first tick after.
 - **If a live change alters a value read on the player's own machine** (walk
-  speed, look sensitivity): Player Controller and Input switch to it in the
-  frame the new revision arrives (R10).
+  speed, look sensitivity): Player Controller and Input pick it up at the
+  start of their first update after it is published (R10).
 - **If the designer changes a value live and then quits without "keep"**: the
   value reverts on the next start. Nothing live is ever in the save.
 
@@ -881,9 +1076,10 @@ Constraints it must respect, from accepted ADRs:
 | ADR-0003 | The storm interval range and strength rules, and the play-time note interval, are tuning data; the next storm already scheduled is saved and keeps its time and strength across a tuning change |
 
 Engine: Unity's data asset and asset loading facilities. The exact format
-(ScriptableObject assets, text files, or both), whether loading goes through
-Addressables, and the fingerprint hash are implementation choices for a new
-ADR (ADR-0004, see Open Questions). No engine reference module covers this
+(ScriptableObject assets, text files, or both) and the asset loading code are
+implementation choices for a new ADR (ADR-0004, see Open Questions). Whether
+the catalog loads through Addressables (it does not, R11) and the fingerprint
+hash (SHA-256, D4) are already decided here. No engine reference module covers this
 domain (`docs/engine-reference/unity/modules/` has no core or scripting file),
 so feasibility was not checked against the pinned engine; the ADR must verify
 the chosen APIs for Unity 6.3.
@@ -891,9 +1087,16 @@ the chosen APIs for Unity 6.3.
 This document already fixes some constraints that ADR-0004 must respect: the
 catalog is read once into immutable plain values and authoring assets are
 never written at run time except by "keep" (R8); the catalog and the error
-screen load without Addressables (R11); the fingerprint hashes bytes, not
-formatted numbers (D4); the retired and released ids lists are committed text
+screen load through the bootstrap scene, without Addressables or `Resources`
+(R11); the fingerprint is SHA-256 over bytes, not formatted numbers, written
+with explicit shifts (D4); numbers are parsed from text tokens into exact
+scaled integers (D1); the retired and released ids lists are committed text
 files (R14); the catalog is never static (R8). ADR-0004 must also decide:
+
+- **SHA-256 under IL2CPP.** Managed code stripping can remove the hash
+  implementation from a player; the ADR keeps it with a `link.xml` entry (or
+  uses `SHA256Managed`/an equivalent managed implementation) and AC24 proves
+  it in the IL2CPP player.
 
 - **Assemblies.** The intended split is three assemblies: plain data types
   (definitions, tuning records) with no engine references; the Simulation,
@@ -910,14 +1113,19 @@ files (R14); the catalog is never static (R8). ADR-0004 must also decide:
   The practical result is likely text assets read by a custom parser, which
   must read numbers with the invariant culture so a player on a German locale
   reads "0.35" correctly.
-- **Start-up.** An awaited start-up step that gates `StartSolo()` and
-  `LoadAndWait()` on Ready (States and Transitions), hooked in so it runs
-  whichever scene Play Mode or the player starts in, with domain reload on or
-  off (R8).
-- **Build gating and manifest.** How the live tuning code is compiled out of
-  release players (R11), how the release-candidate check runs before the build
-  (R9 check 10), and how the data asset list is generated and checked in CI
-  (R11).
+- **Start-up.** The awaited start-up step that gates `StartSolo()` and
+  `LoadAndWait()` on Ready through the catalog guard (States and
+  Transitions), inside the bootstrap fixed by R11
+  (`RuntimeInitializeOnLoadMethod(BeforeSceneLoad)` loading the bootstrap
+  scene additively), with domain reload on or off (R8).
+- **Build gating and manifest.** Live tuning is gated by
+  `#if UNITY_EDITOR || DEVELOPMENT_BUILD` plus a development setting outside
+  the catalog (R11); how the release-candidate check runs before the build
+  (R9 check 10: an `IPreprocessBuildWithReport` callback, or the release
+  script before `BuildPlayer`); **how a release-candidate build is
+  recognised** (for example a build profile or a scripting define set only by
+  the release step); and how the data asset list is generated and checked in
+  CI (R11).
 - **Development-only storm reschedule.** Whether the development panel gets
   a "reschedule next storm from current values" action, so a storm tuning
   change can be felt without waiting up to 70 minutes (Edge Cases).
@@ -929,50 +1137,67 @@ dependent cannot run without it.
 
 | System | Hard / soft | Interface | Design doc |
 |---|---|---|---|
-| Session & Authority (2) | Hard | Loads the catalog, builds systems from it (R10), live tuning through its request queue (R12), fingerprint check (R13) | [session-and-authority.md](session-and-authority.md) (in review) |
+| Session & Authority (2) | Hard | Loads the catalog, builds systems from it (R10), live tuning through its request queue (R12), fingerprint check (R13); `tuning.session_and_authority` | [session-and-authority.md](session-and-authority.md) (in review) |
 | Input (3) | Hard | `tuning.input`, read every frame on each player's machine (R10) | [input.md](input.md) (in review) |
-| Ore & Item Economy (4) | Hard | `ore`, `material`, `item` definitions; the four holdable fields on `tool` and `gear` (R2); `tuning.ore_and_item_economy` | [ore-and-item-economy.md](ore-and-item-economy.md) (in review) |
-| Home Valley (5) | Hard | `gatherable` definitions and placement tuning; `tuning.home_valley` | Not written: provisional |
-| Player Controller (6) | Hard | `tuning.player_controller`, read on every peer | Not written: provisional |
-| Save & Load (7) | Hard | Id lookup and retired list; `tuning.save_and_load` (play-time note interval) | Not written: provisional |
+| Ore & Item Economy (4) | Hard | `ore`, `material`, `item` definitions; the four holdable fields on `tool` and `gear` (R2); `limits.holdable`, `limits.ore` (R1); `tuning.ore_and_item_economy` | [ore-and-item-economy.md](ore-and-item-economy.md) (in review) |
+| Home Valley (5) | Hard | `gatherable` definitions; `tuning.home_valley`. Layout spots are scene content, not data | [home-valley.md](home-valley.md) (written, in design) |
+| Player Controller (6) | Hard | `tuning.player_controller`, read on every peer | [player-controller.md](player-controller.md) (written, in review) |
+| Save & Load (7) | Hard | Id lookup and retired list; `tuning.save_and_load` (play-time note interval) | [save-and-load.md](save-and-load.md) (written, in design) |
+| Pack (8) | Hard | `tuning.pack` (owns `full_pack_slow`, passed to Player Controller, R4) | [pack.md](pack.md) (written, in design) |
 | Tools & Gear (9) | Hard | `tool`, `gear` definitions; `tuning.tools_and_gear` | Not written: provisional |
 | Asteroid World (16) | Hard | `zone` definitions; `tuning.asteroid_world` | Not written: provisional |
 | Health & Damage (17) | Hard | `tuning.health_and_damage` | Not written: provisional |
 | Perception (18) | Hard | `tuning.perception` | Not written: provisional |
-| Pack, Gathering, Building, Stash, Crafting, Storms, Oxygen, Creature AI, Mining, Run Flow, Hunter Escalation (8, 10 to 14, 19 to 23) | Hard | Their definitions and tuning sets | Not written: provisional. Their systems-index rows do not list Game Data & Tuning because every Simulation system depends on it implicitly (see below) |
+| Gathering, Building, Stash, Crafting, Storms, Oxygen, Creature AI, Mining, Run Flow, Hunter Escalation (10 to 14, 19 to 23) | Hard | Their definitions and tuning sets | Not written: provisional. Their systems-index rows do not list Game Data & Tuning because every Simulation system depends on it implicitly (see below) |
 | Home HUD & Panels, Run HUD, Menus & Settings, Visual Feedback & Lighting, Audio (15, 24 to 27) | Soft | Display view by id; they work with placeholder names and icons | Not written |
 
 **Bidirectional check.** The systems index lists Game Data & Tuning as a
 dependency of rows 4, 5, 6, 7, 9, 16, 17 and 18, which matches the table.
-Session & Authority, Input and Ore & Item Economy are now written, and each
-lists Game Data & Tuning upstream.
+Session & Authority, Input, Ore & Item Economy, Home Valley, Player
+Controller, Save & Load and Pack are written, and each mentions Game Data &
+Tuning as an upstream dependency (checked 2026-11-28).
 **Every Simulation system depends on Game Data & Tuning implicitly**, whether
 or not its systems-index row says so; the index lists it only where it is the
 system's first or main data dependency, and `/consistency-check` should not
-flag the others. No dependent design doc exists yet, so none can be checked;
-each must list Game Data & Tuning under its upstream dependencies when written.
+flag the others. Each design doc not yet written must list Game Data & Tuning
+under its upstream dependencies when written.
+
+### Open conflicts flagged to owners
+
+Revision 3 changed rules that written design docs already use. This document
+does not edit theirs; each owner reconciles at its next revision.
+
+| Owner | Conflict |
+|---|---|
+| Player Controller | Angles are now `deg` and turn rates `deg_per_s` (R5); accelerations use the new `m_per_s2`. Confirm unit tokens are written as R5's tokens (`m_per_s`, not `m/s`) |
+| Home Valley | `rebuild_margin` is a `multiplier`, not a `share`. Its checks across systems and its warning tier become owner CI tests (R3); the runtime catalog has no warning tier. Layout spots are scene data, not a kind (R2) |
+| Save & Load | `size_budget_kb` is a test budget, not tuning (R1). The retry-product constraint becomes a CI test (or ranges chosen so it always holds). A fingerprint in `writtenBy` is fine as a diagnostic (R12 step 6) |
+| Input | `look_sens` takes the unit `deg_per_px` (R5); Input's doc says whether it is per pixel or per raw input count |
+| Pack | None known |
 
 ## Tuning Knobs
 
 ### This system's own settings
 
 This system owns **no gameplay knob**: nothing here changes how the game plays.
-Its settings are development and build settings, kept in data like everything
-else:
+Its one data value forms the set `tuning.game_data`, in the R3 record shape:
 
-They form the set `tuning.game_data`, in the R3 record shape:
-
-| Key | Type | Value | Min | Max | Step | Unit | Apply | Too low / off | Too high / on |
+| Key | Type | Value | Min | Max | Step | Unit | Apply | Too low | Too high |
 |---|---|---|---|---|---|---|---|---|---|
-| `live_tuning_enabled` | bool | true | — | — | — | `none` | `restart` | No live tuning even in development builds; every change needs a restart (slow tuning loop) | Live tuning in development builds and the editor. It can never turn live tuning on in a release player, where the code is not compiled in (R11); it is only an extra off-switch |
-| `catalog_load_budget_s` | float | 0.5 | 0.1 | 2 | 0.1 | `s` | `restart` | Unreachable with MVP content; false alarms | Start-up feels slow before the main menu |
-| `live_step_big_multiplier` | int | 10 (the M of D2) | 2 | 50 | 1 | `count` | `live` | Big steps hardly bigger than small ones | One click jumps across most of a range |
+| `live_step_big_multiplier` | int | 10 (the B of D2) | 2 | 50 | 1 | `count` | `live` | Big steps hardly bigger than small ones | One click jumps across most of a range |
 
-Owner: Game Data & Tuning. Rationale: `catalog_load_budget_s` keeps start-up
-well under a second before the main menu; `live_step_big_multiplier` matches
-the prototype panel's ×10 modifier. None is provisional.
-`catalog_load_budget_s` is a target the load is measured against (Acceptance
-Criteria), not a limit that stops the game.
+Owner: Game Data & Tuning. Rationale: matches the prototype panel's ×10
+modifier. Not provisional. It is harmless in a release build, where no panel
+exists.
+
+Two former entries are **not game data** (R1) and left the catalog in
+revision 3:
+
+- **Live tuning switch**: a build and development setting. Compiled in only
+  with `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, plus a development-settings
+  toggle kept outside the catalog (default on), never fingerprinted (R11).
+- **Catalog load budget**: a test budget of **0.5 s**, stated in Game Feel
+  and measured by AC33; not in any tuning set.
 
 ### The knob convention every design doc follows
 
@@ -980,9 +1205,15 @@ Every other design doc's Tuning Knobs section lists its values in the R3
 record shape: key, type, value, min, max, step, unit, apply, rationale, and
 whether it is still provisional, plus any constraints between its keys.
 Numbers that describe one thing go on that thing's definitions instead
-(R1). Each such list **is** that system's tuning set
+(R1), and their ranges go in the kind's field-limits record `limits.<kind>`
+(or `limits.holdable` for `stack_max`, `worth`, `tier`), listed in a separate
+table of field, type, min, max, step and unit, with no value (author defaults
+are schema hints). Each tuning list **is** that system's tuning set
 `tuning.<system>`; this document does not repeat them. A knob owned by one
-system is never duplicated in another's set (R4).
+system is never duplicated in another's set (R4). Constraints listed are
+within one set or one definition only; a rule across sets or systems is
+listed as an owner CI test, not a constraint (R3). Performance and test
+budgets are listed with their test, not as knobs (R1).
 
 ### Starting values waiting for their owners
 
@@ -997,16 +1228,16 @@ Where R1 says a number belongs on a definition, the "Lands as" column says so.
 
 | Owning system | Prototype values (key: value) | Lands as |
 |---|---|---|
-| Player Controller | walk_speed 3.8 m/s, sprint_speed 6.2 m/s, look_sens 0.0022 rad/px, key_turn 1.9 rad/s | `tuning.player_controller`, with constraint `walk_speed ≤ sprint_speed` |
+| Player Controller | walk_speed 3.8 m_per_s, sprint_speed 6.2 m_per_s, look_sens about 0.126 deg_per_px (converted from the prototype's 0.0022 rad/px), key_turn about 108.9 deg_per_s (converted from 1.9 rad/s) | `tuning.player_controller`, with constraint `walk_speed ≤ sprint_speed`; converted numbers are rounded by the owner when set |
 | Pack | pack_slots 16, full_pack_slow 0.35 share (Pack owns it, R4; passed to Player Controller) | `tuning.pack` |
-| Oxygen | oxygen_seconds 420 s, sprint_oxygen_mult 2.4, oxygen_low 0.3 share, suffocate_dps 12 hp/s, canister_refill 0.45 share, canister_carry 2 | `tuning.oxygen` (canister_refill may move to the canister's `item` definition; Oxygen decides) |
+| Oxygen | oxygen_seconds 420 s, sprint_oxygen_mult 2.4, oxygen_low 0.3 share, suffocate_dps 12 hp_per_s, canister_refill 0.45 share, canister_carry 2 | `tuning.oxygen` (canister_refill may move to the canister's `item` definition; Oxygen decides) |
 | Health & Damage | max_health 100 hp | `tuning.health_and_damage` |
 | Mining | mine_range 3.6 m | `tuning.mining` |
 | Tools & Gear | drill_power 1, drill2_power 2 | fields of the `tool.drill.*` definitions |
 | Ore & Item Economy | **Set by its design doc** (2026-11-28): six ores with `worth` and `toughness` fields replace the prototype's four `tough_*` and `value_*` values. Source of truth: `design/gdd/ore-and-item-economy.md` R2 and `design/registry/entities.yaml` | fields of the `ore.*` definitions |
 | Crafting | drill2_* (8, 5, 2 pieces), canister_* (4, 1 pieces) | inputs of `recipe.*` definitions |
 | Perception | hear_radius 26 m, drill_noise 1.0, break_noise 1.6, sprint_noise 1.2, noise_decay 0.4, wake_noise 6 | `tuning.perception` (Perception owns them, R4; passed to Creature AI) |
-| Creature AI | burrower_* (speed 4.4 m/s, bite 22 hp, windup 0.55 s, cooldown 1.5 s, reach 2.3 m, chase_time 16 s, leash 55 m, aggro 6 m, see 10 m, roam 9 m, roam_speed 1.3 m/s), spitter_* (see 11 m, range 30 m, interval 2.8 s, flight 1.7 s, splash 3.0 m, damage 18 hp) | fields of the `creature.burrower` and `creature.spitter` definitions (the definition schema may carry constraints such as see ≤ leash) |
+| Creature AI | burrower_* (speed 4.4 m_per_s, bite 22 hp, windup 0.55 s, cooldown 1.5 s, reach 2.3 m, chase_time 16 s, leash 55 m, aggro 6 m, see 10 m, roam 9 m, roam_speed 1.3 m_per_s), spitter_* (see 11 m, range 30 m, interval 2.8 s, flight 1.7 s, splash 3.0 m, damage 18 hp) | fields of the `creature.burrower` and `creature.spitter` definitions, ranges in `limits.creature` (the definition schema may carry constraints such as `see_m ≤ leash_m`, checked at 9b) |
 | Creature AI | sight_alert 3, stun_drill_time 0.45 s, stun_time 2.6 s, stuns_to_flee 2 | `tuning.creature_ai` |
 | Hunter Escalation | hunter_first 90 s, hunter_interval 45 s, hunter_speed_step 0.1, hunter_bite_step 0.3, hunter_spawn_dist 24 m, hunter_rise 1.6 s | `tuning.hunter_escalation` |
 | Run Flow | safe_radius 34 m (Run Flow owns it, R4; passed to Asteroid World) | `tuning.run_flow` |
@@ -1037,14 +1268,16 @@ tuning loop, not the player's:
   takes effect at the start of the next Simulation tick (R12): at Session &
   Authority's default 30 ticks per second, within about 33 ms of letting go of
   the button. Values read on the player's machine (walk speed, look
-  sensitivity) change the frame the new revision arrives. While the game is
+  sensitivity) change on the reader's first update after the revision is
+  published. While the game is
   paused (including auto-pause when focus moves to the editor) the panel shows
   the change as "queued (paused)" rather than appearing to do nothing.
 - **Keeping a value is one action.** The editor's "keep" writes the current
   live value back into its data asset in one step; no copying numbers by hand
   from the panel into an asset.
-- **Start-up stays quick.** Loading and validating the catalog fits within
-  `catalog_load_budget_s` (0.5 s) at MVP content size.
+- **Start-up stays quick.** Loading and validating the catalog fits within a
+  test budget of 0.5 s at MVP content size (AC33). The budget is not game
+  data (R1).
 
 ## UI Requirements
 
@@ -1057,8 +1290,9 @@ tuning loop, not the player's:
    release build it adds a line asking the player to verify the game files. It
    never offers "continue anyway", in any build: a playtest run on data that
    failed validation would produce observations nobody can trust. The screen,
-   its font and its text are reached directly from the start-up scene, never
-   through Addressables, and its text is fixed English (R11).
+   its font and its text are reached by the bootstrap through the bootstrap
+   scene, never through Addressables or `Resources`, and its text is fixed
+   English (R11).
 2. **Development tuning panel (development builds only, solo sessions).** A
    toggleable overlay listing tuning sets and their values. Each value shows
    key, current value, unit, range, apply mode, and a provisional marker; it
@@ -1070,8 +1304,9 @@ tuning loop, not the player's:
    one live change; R12 step 7). A search field filters by key. "Keep" and
    "keep set" are offered in the editor only, and refuse with the reason when
    the asset would fail validation (R12 step 6). The panel shows the catalog
-   revision and the fingerprint, marked `modified` whenever it differs from
-   revision 1's.
+   revision and the fingerprint, marked `modified` only while it differs from
+   revision 1's (after a reset back to the loaded values it is not marked).
+   Field-limits records (R1) are not listed as editable.
 
 > **📌 UX Flag — Game Data & Tuning**: the data error screen is a player-facing
 > screen (rare, but real). It belongs with Menus & Settings' screens: when
@@ -1088,7 +1323,7 @@ tuning loop, not the player's:
 | `design/gdd/game-concept.md` | Pillars 2 and 3; anti-pillars; Open Questions (storms) | The fantasy this system serves; no gear granted outside play; storm facts (50 to 70 minutes, two storms) |
 | `design/gdd/systems-index.md` | Row 1; TD notes | This system's place and dependents; Building owns its piece list and costs through this system |
 | `prototypes/star-haul/config.js` and `REPORT.md` | Whole file; Tension Retest | The value record shape (R3) and the starting values waiting for their owners |
-| Dependent design docs (rows 2 to 27) | Not written yet | Each will own a tuning set and list its knobs in the R3 shape |
+| Dependent design docs (rows 2 to 27) | Rows 2 to 8 written (Dependencies); the rest not written yet | Each owns a tuning set (and, per kind, a field-limits record) and lists its knobs in the R3 shape; open conflicts in Dependencies |
 
 ## Acceptance Criteria
 
@@ -1098,9 +1333,10 @@ criteria. **Types:**
 
 - *Logic*: an automated EditMode test under `StarHaul/Assets/Tests/EditMode/`,
   built from in-memory fixtures made by factory functions; it reads no file.
-- *Data*: an automated EditMode test that reads the committed game data and
-  list files (`StarHaul/Assets/Tests/EditMode/DataValidation/`). It reads
-  files, so it is kept apart from the Logic tests and counts as Integration.
+- *Integration (data)*: an automated EditMode test that reads the committed
+  game data and list files (`StarHaul/Assets/Tests/EditMode/DataValidation/`).
+  It reads files, so it is kept apart from the Logic tests and counts as
+  Integration.
 - *Integration*: an automated PlayMode or player test, or, where named, a
   documented check whose record goes in `production/qa/evidence/`.
 - *Performance*: a measurement in a built player against a stated budget.
@@ -1123,9 +1359,10 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
    check-2 record, naming both assets. *(Logic; R2, R9)*
 2. **GIVEN** definitions with the ids `Ore.Cobalt`, `ore..cobalt`, `ore`,
    `ore.`, `ore._x`, `9ore.x`, `foo.bar` (unknown kind), `ore.a.b.c.d.e.f`
-   (7 segments), `ore.cöbalt`, ` ore.cobalt` and a 65-character id, **WHEN**
-   validated, **THEN** each gives one check-2 record; **AND** `ore.cobalt`,
-   `ore.a.b.c.d.e` (6 segments) and a 64-character id pass. *(Logic; R2)*
+   (7 segments), `ore.cöbalt`, ` ore.cobalt` and a 65-character id (`ore.`
+   followed by 61 `a`), **WHEN** validated, **THEN** each gives one check-2
+   record; **AND** `ore.cobalt`, `ore.a.b.c.d.e` (6 segments) and a
+   64-character id (`ore.` followed by 60 `a`) pass. *(Logic; R2)*
 3. **GIVEN** `ore.cobalt` is on the retired list, **WHEN** a definition uses
    that id, **THEN** there is a check-3 record; **AND WHEN** a recipe refers
    to `ore.cobalt`, **THEN** there is a check-5 record for the recipe's
@@ -1141,21 +1378,23 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
    two recipes refer to, **THEN** there is exactly 1 record (no cascade).
    *(Logic; R9)*
 6. **GIVEN** a definition missing a field its schema requires, one with a
-   field its schema does not declare, and one with a field of the wrong
-   type, **WHEN** validated, **THEN** each gives one check-4 record.
-   *(Logic; R9)*
+   field its schema does not declare, one with a field of the wrong type, and
+   one with an enum value outside its list, **WHEN** validated, **THEN** each
+   gives one check-4 record; **AND GIVEN** a recipe whose `output` field
+   holds an id of the wrong kind (`tool.drill.basic` where the schema expects
+   `ore`, `material` or `item`), **THEN** one check-5 record. *(Logic; R9)*
 7. **GIVEN** a fixture loader that reports one asset as unreadable, **WHEN**
    the catalog loads, **THEN** there is one check-1 record naming the asset,
    the other assets are still validated and their mistakes reported, the
    catalog is Failed, and no exception escapes. *(Logic; R9, States)*
 8. **GIVEN** the committed game data, **WHEN** the data validation test
-   runs, **THEN** it reports no record. *(Data; R9: this is the test that
+   runs, **THEN** it reports no record. *(Integration (data); R9: this is the test that
    runs on every push)*
 9. **GIVEN** a released ids list containing `item.canister` and data with
    neither that definition nor a retired entry for it, **WHEN** the data
    validation test runs, **THEN** it fails naming `item.canister`; **AND
-   GIVEN** an empty released ids list, **THEN** that check passes. *(Data;
-   R14)*
+   GIVEN** an empty released ids list, **THEN** that check passes.
+   *(Integration (data); R14)*
 9b. **GIVEN** a commit whose retired list has one line removed, and another
     whose retired list has one line changed, compared with the parent commit,
     **WHEN** the CI retired-list script runs, **THEN** it fails for both and
@@ -1179,9 +1418,11 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     | Case | Check |
     |---|---|
     | a `share` of type `int`; a `bool` with unit `s`; unit `percent` | 7 (unit not allowed for the type) |
-    | NaN; +infinity; a float range of −1.7 × 10³⁰⁸ to 1.7 × 10³⁰⁸ (max − min overflows) | 8 |
-    | an `int` value of 2.5; an `int` min of 0.5; an `int` step of 0.5; an `int` value of 3,000,000,000 | 8 |
-    | a `share` with max 1.2; a `share` with min −0.1; a `count` with min −1; a `multiplier` with min 0 | 8 (unit's allowed range) |
+    | NaN; +infinity; a float range of −1.7 × 10³⁰⁸ to 1.7 × 10³⁰⁸ (magnitude bound) | 8 |
+    | an `int` tuning value of 2.5; an `int` definition field of 2.5; an `int` min of 0.5; an `int` step of 0.5 | 4 (type) |
+    | an `int` value of 3,000,000,000 | 8 |
+    | a `share` with max 1.2; a `share` with min −0.1; a `count` with min −1; a `multiplier` with min 0; an `hz` with min 0 | 8 (unit's allowed range) |
+    | a float range of 0 to 0.00000005 with no step | 8 (message `range too narrow; write a step`) |
     | min 10 with max 5; step 0; step −1; step greater than max − min; step 10⁻¹⁰; a min of 0.1234567891 (10 decimals); a range of 0 to 1 with step 10⁻⁶ (more than 100,000 positions) | 8 |
     | a `bool` with a min | 8 |
 13. **GIVEN** min = max = 5 with no step, **WHEN** validated, **THEN** it
@@ -1190,7 +1431,10 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     to 16, a `float` range 0 to 200, an `int` range 0 to 1 and an `int` range
     0 to 250, **THEN** the effective steps are 1, 2, 1 and 3 (round half up:
     2.5 → 3, not banker's 2) and all pass; **AND GIVEN** a written step equal
-    to max − min, **THEN** it passes. *(Logic; D1, R3)*
+    to max − min, **THEN** it passes; **AND GIVEN** a float range 0.1 to 0.4
+    with no step, **THEN** it passes with effective step exactly 0.003 (E = 3
+    at scale 10³); **AND GIVEN** a float range 0.1 to 0.3 with step 0.2,
+    **THEN** it passes. *(Logic; D1, R3)*
 14. **GIVEN** one value for every unit in the R5 table, each with an allowed
     type, **WHEN** validated, **THEN** all pass; **AND GIVEN** the units
     `percent` and `ratio`, **THEN** each gives a check-7 record. *(Logic; R5;
@@ -1198,7 +1442,8 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
 15. **GIVEN** tuning records with, one per case: no `type`; an `int` with no
     min; one with no max; one with no unit; an `apply` of `later`;
     `provisional` false and an empty rationale; and a set with no `owner`,
-    **WHEN** validated, **THEN** each gives exactly one check-4 record.
+    **WHEN** validated, **THEN** each gives exactly one check-4 record (the
+    owner-less set gives one record naming the set, not one per key).
     *(Logic; R3, R9)*
 16. **GIVEN** the Storms schema declares `interval_min_s` and the set lacks
     it, **WHEN** validated, **THEN** there is a check-6 record whose message
@@ -1209,12 +1454,13 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     `tuning.player_controller`, **THEN** a check-6 record naming both sets.
     *(Logic; R4, R9)*
 17. **GIVEN** a set with the constraint `walk_speed ≤ sprint_speed`, **WHEN**
-    walk speed is 7 and sprint speed 6, **THEN** a check-9 record names both
+    walk speed is 7 and sprint speed 6, **THEN** a check-9b record names both
     keys; **AND WHEN** both are 6, **THEN** it passes; **AND GIVEN** each of
     the five operators, **THEN** its equal-values case passes or fails as the
     operator says; **AND GIVEN** a constraint between keys of different units,
     a constraint using `=` between floats, or one naming a key of another set,
-    **THEN** each gives a check-9 record. *(Logic; R3, R9)*
+    **THEN** each gives one check-9a record and no 9b record. *(Logic; R3,
+    R9)*
 18. **GIVEN** one value marked `provisional`, **WHEN** validated as a
     release-candidate build, **THEN** there is a check-10 record; **AND WHEN**
     validated as a development build, **THEN** it passes. *(Logic; R3, R9)*
@@ -1225,8 +1471,10 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     45 with n = −1 the result is 40; from 295 with n = +10, 300; from 300 with
     n = +1, 300; from 10 with n = −1, 10; from 47 with n = 0, 45; **AND GIVEN**
     min 0, max 10, step 3, **THEN** from 9 with n = +1 the result is 10 and
-    from 10 with n = −1 it is 9; **AND GIVEN** min 0, max 10, step 1, **THEN**
-    from 2.5 with n = 0 the result is 3 (ties go up); **AND GIVEN** min 0,
+    from 10 with n = −1 it is 9; **AND GIVEN** a float range min 0, max 10,
+    step 1, **THEN** from 2.5 with n = 0 the result is 3 (ties go up); **AND
+    GIVEN** min 0, max 1, step 0.1, **THEN** from 0.15 with n = 0 the result
+    is 0.2 (a tie on the integers goes up); **AND GIVEN** min 0,
     max 0.3, step 0.1, **THEN** P has exactly 4 positions, the last exactly
     0.3; **AND GIVEN** a float range 0 to 1 with no step, **THEN** P has 101
     distinct positions and one click up from 0 gives exactly 0.01. *(Logic;
@@ -1234,13 +1482,13 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
 20. **GIVEN** min 0, max 200, step 0.1, starting at 0, **WHEN** D2 is
     applied with n = +1 one thousand times, **THEN** after the third call the
     result equals the double literal 0.3 exactly, after every call k it
-    equals `round_to(k × 0.1, 1)` exactly, and after the last it equals 100
-    exactly; every value is held as a double. *(Logic; D2: positions are
-    computed, not accumulated)*
+    equals `(double)k / 10` exactly, and after the last it equals 100
+    exactly. *(Logic; D2: positions are computed, not accumulated)*
 21. **GIVEN** `live_step_big_multiplier` 10, **WHEN** a modifier click is
     made, **THEN** n = +10; **AND GIVEN** it is 50, **THEN** n = +50; **AND
-    GIVEN** it is 51 or 1, **THEN** `tuning.game_data` fails D1. *(Logic; D2,
-    Tuning Knobs)*
+    GIVEN** it is 51 or 1, **THEN** `tuning.game_data` fails D1 (check 8);
+    **AND** `tuning.game_data` holds no key other than
+    `live_step_big_multiplier`. *(Logic; D2, Tuning Knobs)*
 22. **GIVEN** durations of 3,612.5 s, 0 s, 4,200 s and 3,612.7 s, **WHEN**
     converted by D3, **THEN** the results are exactly 3,612,500 ms, 0 ms and
     4,200,000 ms, and 3,612,700 ms within 10⁻⁶ ms. *(Logic; D3)*
@@ -1253,10 +1501,15 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     fingerprint; a change only to an icon, a rationale, an owner or a
     provisional flag gives the same; an `apply` left at its default and one
     written as `live` give the same; a float written as −0 gives the same as
-    +0. *(Logic; D4)*
-24. **GIVEN** the same golden fixture, **WHEN** the golden test runs in an
-    IL2CPP Windows player build, **THEN** it gives the same literal as in the
-    editor. *(Integration, automated player test; D4)*
+    +0; a change to one limits record's max gives a different fingerprint; a
+    change to a development setting (the live tuning switch) or a schema
+    author default gives the same. *(Logic; D4)*
+24. **GIVEN** the same golden fixture in the shipped text format (with tricky
+    literals: `0.1`, `0.35` and a 17-significant-digit value), **WHEN** an
+    IL2CPP Windows player build parses it from text and runs the golden test
+    and the AC58 `decimals()` vectors, **THEN** the fingerprint equals the
+    editor's literal and every vector gives the editor's result. *(Integration,
+    automated player test; D1, D4)*
 
 **Lifecycle, loading and hand-over (States, R8, R10, R11)**
 
@@ -1281,7 +1534,9 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     value, **WHEN** started, **THEN** screenshots show the data error screen
     with its title, fingerprint, problem count, the problem line and exactly
     three actions (copy, open log folder, quit), and the release one also
-    shows the "verify the game files" line. *(UI; UI Requirements 1)*
+    shows the "verify the game files" line. The broken release build is made
+    by a test build script that bypasses the release step's pre-check (R9
+    check 10), never by the real release step. *(UI; UI Requirements 1)*
 28. **GIVEN** a development player whose Addressables initialisation is made
     to fail, **WHEN** it starts with one broken value, **THEN** the data error
     screen still appears; **AND WHEN** it starts with valid data, **THEN** the
@@ -1301,14 +1556,18 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     view returns the display data under the same id. *(Logic; R7, R8)*
 32. **GIVEN** the editor in Play Mode with `oxygen_seconds` 420 in its data
     asset, **WHEN** it is changed live to 600 and Play Mode ends without
-    "keep", **THEN** the data asset's file is byte-identical to before; **AND
-    WHEN** the same is done with "keep", **THEN** the asset reads 600.
-    *(Integration, editor test or documented check; R8, R12; provisional on ADR-0004 for the write-back)*
+    "keep", **THEN** the data asset's file is byte-identical to before **and**
+    the in-memory data asset object (the loaded ScriptableObject or text
+    asset) still holds 420 after `ExitPlayMode`; **AND WHEN** the same is done
+    with "keep", **THEN** the asset reads 600. *(Integration, EditMode
+    `[UnityTest]` using `EnterPlayMode`/`ExitPlayMode`; R8, R12; provisional
+    on ADR-0004 for the write-back)*
 33. **GIVEN** MVP content (all sets populated) in an IL2CPP Windows
     development player on the reference machine (the development PC until a
     performance budget names a minimum spec), **WHEN** the time from the
     first catalog read to Ready is measured over 5 cold starts, **THEN** the
-    median is at most `catalog_load_budget_s` and no start exceeds twice it.
+    median is at most the 0.5 s test budget (a constant in the test, not game
+    data, R1) and no start exceeds 1 s.
     *(Performance, ADVISORY until a minimum spec exists; Game Feel; provisional on MVP content existing)*
 
 **Live tuning (R12) and builds (R11)**
@@ -1329,12 +1588,23 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     same key, **THEN** the later value is in use; **AND GIVEN** walk 5 and
     sprint 6 with the constraint `walk_speed ≤ sprint_speed`, and "sprint →
     5" then "walk → 6" queued in one tick, **THEN** "sprint → 5" applies,
-    "walk → 6" is refused with a check-9 record naming both keys, and
-    revision 2 holds walk 5 and sprint 5. *(Logic; R12)*
+    "walk → 6" is refused with a check-9b record naming both keys, and
+    revision 2 holds walk 5 and sprint 5; **AND GIVEN** walk 5, sprint 6 and
+    "sprint → 8", "walk → 7", "sprint → 6" in one tick, **THEN** the third is
+    refused (walk 7 > sprint 6) and the new revision holds walk 7, sprint 8;
+    **AND GIVEN** two queued requests that are both refused, **THEN** the
+    revision number and fingerprint are unchanged. *(Logic; R12)*
 37. **GIVEN** a value marked `apply: next_run`, **WHEN** it is changed live,
-    **THEN** it is not applied until the next run-launch or return-home
-    event; **AND GIVEN** a value marked `apply: restart`, **THEN** it is
-    never applied in the session and is reported pending. *(Logic; R3, R12)*
+    **THEN** it is not applied until the next run-launch event, and in a
+    separate case not until the next return-home event (each trigger tested
+    alone); **AND GIVEN** walk 5, sprint 8, `walk_speed ≤ sprint_speed`,
+    `walk_speed` marked `next_run` and `sprint_speed` marked `live`, "walk →
+    7" queued (valid against sprint 8) and then "sprint → 6" applied live
+    (valid against walk 5), **WHEN** the run launches, **THEN** "walk → 7" is
+    refused with a check-9b record naming both keys and walk stays 5; **AND GIVEN** a held `next_run` change when a join is accepted,
+    **THEN** it is discarded and the discard logged; **AND GIVEN** a value
+    marked `apply: restart`, **THEN** it is never applied in the session and
+    is reported pending. *(Logic; R3, R12)*
 38. **GIVEN** a request to change a definition (a piece's cost), **WHEN** it
     reaches the Authority layer, **THEN** it is refused with a
     definitions-are-fixed result and the revision is unchanged. *(Logic; R12)*
@@ -1348,8 +1618,10 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     join is handled first and the change is then refused. *(Logic; R12, Edge
     Cases)*
 40. **GIVEN** a session at revision 3 and a spy save store, **WHEN** a save
-    is written, **THEN** the saved model contains no tuning key, no revision
-    and no fingerprint; **AND WHEN** that save is loaded inside the same
+    is written, **THEN** the saved model contains no tuning key and no
+    revision, and a fingerprint appears at most in `writtenBy`; **AND** a
+    load whose `writtenBy` fingerprint differs from the session's behaves
+    exactly like one whose fingerprint matches (no rule reads it); **AND WHEN** that save is loaded inside the same
     session, **THEN** the session's live values are unchanged. *(Logic; R12
     step 6)*
 40b. **GIVEN** a development build where a value was changed live and not
@@ -1360,12 +1632,15 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     value's key, value, unit, range, apply mode and provisional marker, the
     changed value highlighted with its original, the pending marker, the
     revision and the fingerprint marked `modified`. *(UI; UI Requirements 2)*
-42. **GIVEN** a release player build, **WHEN** its compiled assemblies are
-    inspected, **THEN** no live tuning panel or change-queue type for tuning
-    exists in them; **AND GIVEN** `live_tuning_enabled` false in a development
-    build, **THEN** the panel does not open; set true in data for a release
-    build, **THEN** nothing changes. *(Integration, automated build check;
-    R11, Tuning Knobs; provisional on ADR-0004 for the gating mechanism)*
+42. **GIVEN** a release build, **WHEN** the IL2CPP build's input assemblies
+    (the managed DLLs passed to IL2CPP) or a Mono-backend release build's
+    assemblies are inspected, **THEN** no live tuning panel or change-queue
+    type for tuning exists in them (gated by `#if UNITY_EDITOR ||
+    DEVELOPMENT_BUILD`); **AND GIVEN** the development-settings live tuning
+    toggle off in a development build, **THEN** the panel does not open;
+    **AND** no game data key can affect either (the catalog holds no such
+    key). *(Integration, automated build check; R11, Tuning Knobs;
+    provisional on ADR-0004 for the gating mechanism)*
 43. **GIVEN** a release player, **WHEN** a modified tuning data file (in the
     format ADR-0004 chooses) is placed beside the executable and in the
     player's persistent data folder and the game is started, **THEN** the
@@ -1400,61 +1675,103 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
     and Input readers outside the tick, and Pack's `full_pack_slow` passed to
     Player Controller, **WHEN** a change to `walk_speed`, Input's
     `stick_deadzone` and `full_pack_slow` makes a new revision, **THEN** each reader
-    holds the new value in the frame the revision is published, Player
+    holds the new value on the reader's first update after publish, Player
     Controller gets `full_pack_slow` in the same frame as Pack, and none of
     them reads the catalog. *(Logic; R10, R12 step 3)*
-48. **GIVEN** the editor with domain reload turned off, **WHEN** Play Mode is
-    entered from the valley scene (not the start-up scene) twice in a row,
-    **THEN** the catalog reaches Ready both times, as a new instance with
-    revision 1, and no value from the first session is present in the
-    second. *(Integration, editor PlayMode test; R8)*
+48. **GIVEN** an EditMode `[UnityTest]` that opens the valley scene (not the
+    start-up scene) and turns domain reload off in Enter Play Mode Options,
+    **WHEN** it calls `EnterPlayMode` and `ExitPlayMode` twice, **THEN** the
+    catalog reaches Ready both times, as a new instance with revision 1, and
+    no value from the first session is present in the second; **AND GIVEN**
+    the same with one broken value in data, **THEN** the data error screen is
+    shown both times (reached through the bootstrap scene, R11).
+    *(Integration, EditMode `[UnityTest]`; R8, R11)*
 49. **GIVEN** a fake loader that counts reads, **WHEN** the catalog loads and
     then three live changes are applied and a set is reset, **THEN** each data
     asset was read exactly once, and the reset set equals revision 1's values.
     *(Logic; R8, R12 step 7, UI Requirements 2)*
 50. **GIVEN** the project's data folder, **WHEN** the CI manifest check runs,
-    **THEN** it fails if a data asset is missing from the generated list or is
-    assigned to an Addressables group, and passes otherwise. *(Integration,
+    **THEN** it fails if a data asset is missing from the generated list, is
+    assigned to an Addressables group, or is pulled into a bundle implicitly
+    (found in the bundle dependencies or the Addressables build layout
+    report), and passes otherwise. *(Integration,
     CI script; R11; provisional on ADR-0004)*
 51. **GIVEN** `ore.glint` on the retired list with the build `0.3.0`, **WHEN**
-    a definition uses that id, **THEN** the check-3 record's message names
-    `0.3.0`. *(Logic; R14)*
+    a definition uses that id, **THEN** the check-3 record's `retired_in`
+    field is `0.3.0`. *(Logic; R14)*
 52. **GIVEN** the panel's "reset" for one set with two changed values,
     **WHEN** it is used, **THEN** the catalog revision rises by exactly one.
     *(Logic; UI Requirements 2)*
-53. **GIVEN** the game paused with a live change queued, **THEN** the panel
-    model reports it as "queued (paused)" and it applies on the first tick
-    after unpausing. *(Logic; R12 step 3)*
-54. **GIVEN** a release-candidate build step and one provisional value,
-    **WHEN** the build runs, **THEN** it fails before producing a player,
-    naming the value. *(Integration, build script; R9 check 10; provisional on
-    ADR-0004)*
+53. **GIVEN** the game paused, **WHEN** a live change is queued, **THEN** the
+    panel model reports it as "queued (paused)" and it applies on the first
+    tick after unpausing. *(Logic; R12 step 3)*
+54. **GIVEN** a release-candidate build and one provisional value, **WHEN**
+    the build runs (the check in an `IPreprocessBuildWithReport` callback, or
+    in the release script before `BuildPlayer`), **THEN** it fails before
+    producing a player, naming the value. *(Integration, build script; R9
+    check 10; provisional on ADR-0004 for how a release-candidate build is
+    recognised)*
 55. **GIVEN** an unreadable tuning set asset whose owner's schema declares
-    five keys, **WHEN** validated, **THEN** there is one check-1 record and no
-    check-6 record for that set. *(Logic; R9 check order)*
+    five keys, and the generated data asset list mapping that asset to its
+    set id, **WHEN** validated, **THEN** there is one check-1 record naming
+    the asset and the set, and no check-6 record for that set. *(Logic; R9
+    check order)*
+
+**Added in revision 3**
+
+56. **GIVEN** fixtures, one per case, **WHEN** validated, **THEN**: no
+    `limits.ore` entry for the ore field `toughness` → one check-6 record;
+    an ore with `toughness` above the `limits.ore` max → one check-8 record
+    naming the ore and the field; an ore definition writing its own `min` →
+    one check-4 record; `stack_max` limited in `limits.holdable` only → no
+    record (not a duplicate); a schema type for `toughness` that differs from
+    the `limits.ore` type → one check-4 record; a limits record field with a
+    `value` → one check-4 record. *(Logic; R1, R9)*
+57. **GIVEN** a creature schema with the constraint `see_m ≤ leash_m` and a
+    creature with `see_m` 30 and `leash_m` 20, **WHEN** validated, **THEN**
+    there is one check-9b record naming the definition and both fields;
+    **AND GIVEN** set constraints naming an unknown key, using `=` between
+    floats, and joining keys of different units, **THEN** each gives exactly
+    one check-9a record and none reaches 9b; **AND GIVEN** a constraint naming
+    a key that failed check 6, **THEN** no 9a or 9b record for it. *(Logic;
+    R3, R9)*
+58. **GIVEN** the text tokens `"0.1"`, `"1e-9"`, `"0.000000001"`, `"1200"`
+    and `"0.35"`, **WHEN** `decimals()` is computed from the token, **THEN**
+    the results are 1, 9, 9, 0 and 2, and each token parses to the stored
+    double; **AND GIVEN** a float range 0 to `1e20`, **THEN** D1 fails the
+    magnitude bound (check 8). *(Logic; D1)*
+59. **GIVEN** a set changed live and then reset to its loaded values, **WHEN**
+    the reset is applied, **THEN** the panel model reports the fingerprint as
+    not modified and it equals revision 1's, though the revision number has
+    risen. *(Logic; States, UI Requirements 2)*
+60. **GIVEN** a set with one `live`, one `next_run` and one `restart` key, each
+    changed, **WHEN** the set is reset, **THEN** the `live` key reverts at the
+    next tick, the `next_run` key at the next run launch, and the `restart`
+    key only loses its pending mark. *(Logic; R12 step 7)*
 
 **Traceability**
 
 | Rule, formula or state | Criteria |
 |---|---|
-| R1 What is game data, limits sets | Code review (control manifest); limits checked through 6 and 12 |
-| R2 Ids, shared holdable fields | 1, 2; shared fields by the owners' schemas (6) |
-| R3 Value record, double floats, apply, constraints, provisional | 13, 15, 17, 18, 20, 35, 37 |
+| R1 What is game data, field-limits records, budgets not data | Code review (control manifest) for "nothing else is data"; limits 56; budgets 21, 33, 42 |
+| R2 Ids, kinds incl. `limits`, shared holdable fields | 1, 2, 6; shared holdable fields in `limits.holdable` 56 |
+| R3 Value record, double floats, apply, constraints (9a/9b), provisional | 13, 15, 17, 18, 20, 35, 37, 57 |
 | R4 Tuning sets, one owner | 16 |
 | R5 Units | 12, 14 |
 | R6 No gameplay number in code | Code review (control manifest) |
 | R7 Ids only, display data apart | 4, 31 |
 | R8 Catalog, immutable, read once, scene-independent start-up | 29, 30, 31, 32, 48, 49 |
-| R9 Validation, check order, release-candidate gate | 1 to 9, 12, 15 to 18, 54, 55 |
+| R9 Validation, check order, release-candidate gate | 1 to 9, 12, 15 to 18, 54 to 57 |
 | R10 Systems receive their data, readers outside the Simulation | 29, 44, 47 |
-| R11 Build content only, compile-time gate, manifest | 28, 42, 43, 50 |
-| R12 Live tuning, batch check, keep, reset, queued while paused | 32, 34 to 41, 40b, 43, 46, 47, 49, 52, 53 |
+| R11 Build content only, compile-time gate, bootstrap scene, manifest | 27, 28, 42, 43, 48, 50 |
+| R12 Live tuning, per-request batch check, next_run re-check, keep, reset by apply, queued while paused | 32, 34 to 41, 40b, 43, 46, 47, 49, 52, 53, 60 |
 | R13 Fingerprint shown and logged (MVP part) | 23, 26, 27, 34, 41 |
 | R14 Retired and released ids | 3, 9, 9b, 10, 51 |
-| D1 | 11 to 13, 21, 35 |
+| D1 | 11 to 13, 21, 24, 35, 58 |
 | D2 | 19, 20, 21 |
 | D3 | 22, 44 |
 | D4 | 23, 24 |
+| States: fingerprint `modified` only when it differs from revision 1 | 59 |
 | States: Loading → Failed, Failed terminal | 7, 25 |
 | States: Ready before StartSolo / LoadAndWait | 26, 26b |
 | States: Ready n → n+1 | 30, 34, 36 |
@@ -1466,11 +1783,12 @@ arrives with co-op (Tier 2a) and gets its criterion in the co-op design doc.
 |---|---|---|---|
 | 1 | Data format and loading: ScriptableObject assets, text (JSON) files, or both; how "keep" writes back in the editor; the assembly split and whether the Simulation may use engine value types; the parser. Becomes **ADR-0004 (game data format)**, verified against Unity 6.3, within the constraints listed under Dependencies (catalog loads without Addressables, fingerprint per D4, read-once immutable values) | technical-director, via `/architecture-decision` | Before the first story that loads data (Milestone A, first sprint) |
 | 2 | ~~Systems-index dependencies for the eleven systems that read tuning~~ **Closed (revision 1):** every Simulation system depends on this one implicitly (Dependencies, bidirectional check) | — | — |
-| 3 | Live tuning in co-op development sessions (more than one player): host broadcasts changes, or stays solo-only. **Solo-only until decided**; no downstream design doc may assume otherwise | network-programmer, in the co-op ADR | Before Tier 2a |
+| 3 | Live tuning in co-op development sessions (more than one player): host broadcasts changes, or stays solo-only. **Solo-only until decided**; no downstream design doc may assume otherwise | network-programmer, in the co-op ADR | **Before the Tier 2a playtests** |
 | 4 | Tuning profiles: named sets of overrides for playtest variants or test fixtures (like the prototype's retest rounds). Whatever is chosen, every override must pass D1 and the set's constraints, and the profile's name must appear in the log and the fingerprint | systems-designer | At the first Milestone A playtest |
 | 5 | Which values use `apply: next_run` or `restart` (R3): each owning design doc says when it is written | Each owning system | With each design doc |
 | 6 | ~~Shared values with two candidate owners~~ **Decided provisionally (revision 1):** Pack owns `full_pack_slow`, Run Flow owns `safe_radius`, Perception owns the noise values (R4). Reversible when those design docs are written | Those design docs' authors may revise | When the first of each pair is designed |
 | 7 | Display text keys and localisation: display names are written in English now; a key scheme for translation is not designed | Menus & Settings / localization | Vertical Slice |
+| 8 | **Deferred (revision 3):** exporting live changes from a development player (outside the editor, where "keep" is unavailable) to a file the designer can merge into data | systems-designer with tools-programmer | After a playable build exists |
 
 ### Decisions taken on the designer's behalf (2026-11-27, autonomous mode)
 
@@ -1543,3 +1861,39 @@ session's parallel review); also logged in the decision log:
 27. Deferred as recommended: a development-only storm reschedule action
     (Dependencies, ADR-0004 list), validating assets when saved in the editor,
     and dev-only out-of-range live edits.
+
+Added in revision 3 (2026-11-28), from the creative-director's rulings in the
+third `/design-review`; also logged in the decision log:
+
+28. **(a) Limits are not tuning sets**: field-limits records `limits.<kind>`
+    and the shared `limits.holdable` (Ore & Item Economy), min/max/step/unit/
+    type per field, no value, restart-only, fingerprinted (R1, R2, R9, D4).
+29. **(b) Units**: degrees are the only angle unit (`deg`, `deg_per_s`,
+    `deg_per_px`), `m_per_s2` added, no size unit; performance and test
+    budgets are not game data (R1, R5).
+30. **(c) Data holds only within-set constraints**; rules across sets or
+    systems are owner-written CI tests, possibly advisory; the runtime catalog
+    only passes or fails; valley layout spots are scene content (R2, R3, R9).
+31. **(d) `live_tuning_enabled` and `catalog_load_budget_s` leave the
+    catalog**: a compile-time gate plus a dev setting, and a 0.5 s test budget;
+    `tuning.game_data` keeps only `live_step_big_multiplier` (R11, Tuning
+    Knobs).
+32. **(e) A save carries no tuning and no revision**; a fingerprint in
+    `writtenBy` is a diagnostic no rule reads (R12 step 6).
+33. **(f) Open conflicts are flagged to owners** in Dependencies, not edited
+    in their docs.
+34. **B1 Scaled-integer arithmetic**: `decimals()` from the text token,
+    int64 scaled integers for D1 and D2, default float step at d0 + 2, a 2⁵³
+    magnitude bound, "range too narrow" blamed on the range (D1, D2).
+35. **B5 Bootstrap**: a `BeforeSceneLoad` hook loads a bootstrap scene that
+    references the data list and error screen; no Addressables, no
+    `Resources` (R11).
+36. Validating a data asset when it is saved in the editor is no longer
+    deferred (decision 27): it is added as a convenience, never blocking the
+    save (R8).
+37. **B6 Live batches**: each request checked against the accepted ones before
+    it; `next_run` re-checked when applied and discarded on join; reset
+    follows each key's `apply` (R12).
+38. Deferred: exporting changes from development players (Open Question 8);
+    co-op live tuning must be decided before the Tier 2a playtests (Open
+    Question 3).

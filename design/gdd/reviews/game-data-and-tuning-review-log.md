@@ -126,3 +126,49 @@ Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 
 
 ### Revision 2 — 2026-11-28 (not a review)
 Every blocking item from both 2026-11-28 reviews revised in the same side session, at the designer's standing approval: D2 rebuilt on a scaled-integer grid; doubles throughout; combined-revision check, safe "keep" and "keep set", reset to revision 1, "queued (paused)"; readers outside the Simulation get the published revision; compile-time gate; joins by fingerprint; scene-independent start-up; D4 layout with a type-tag table and hand-written golden hex; R9 field types, check-order and cascade wording (retired references always reported), tuning records under check 4; the per-kind limits set (R1) added by the c02cc46 session kept; shared holdable fields owned by Ore & Item Economy; unit `hz`; stale tables fixed; 11 acceptance criteria added (46 to 55, plus 9b, 26b, 40b) and the traceability table brought up to date. The CD rulings are decisions 18 to 27. Status In Review; a fresh-session `/design-review` decides Approved. Note: the hashes above stamp the documents as reviewed (before this revision), so the next review sees the target as CHANGED.
+
+## Review — 2026-11-28 — Verdict: NEEDS REVISION
+Review mode: full · Workflow: full
+Scope signal: M
+Specialists: systems-designer, qa-lead, unity-specialist, game-designer, creative-director (senior)
+Blocking items: 9 | Recommended: 14
+Summary: Third re-review (revision 2). The earlier AC blockers and most rule blockers are resolved and the design holds, but D1, D2 and R3 still compute in doubles, so the doc's own formulas reject valid data (0.1 to 0.3 with step 0.2) and can overflow int64 (a default step with 19 decimals). The R1 limits sets collide with R4 and check 6, and the catalog's boundary is unclear now that sibling GDDs push test budgets, cross-set checks, layout and dev switches into it. Rulings: all arithmetic on scaled integers from the authored text; limits become `limits.<kind>` records plus a shared `limits.holdable`; degrees replace radians and `m_per_s2` is added; budgets and cross-set rules are CI tests, not data; `live_tuning_enabled` and `catalog_load_budget_s` leave the catalog; a diagnostic fingerprint in the save is allowed.
+Prior verdict resolved: Partly (AC blockers, doubles, D4 layout, safe keep, scene-independent start-up intent resolved; D2 grid, R9 constraint check and limits sets not)
+Findings:
+- [BLOCKING] Formulas D1 / D2 / Core Rules R3: default step, step and range clauses, and nearest index computed in doubles; no magnitude bound; count decimals from the text token and work on int64 scaled integers
+- [BLOCKING] Core Rules R1 / R4 / R9: limits sets collide on shared holdable fields, break R4 naming and ownership
+- [BLOCKING] Core Rules R9: no check that constraints are well formed; in-definition constraints have no check
+- [BLOCKING] Core Rules R5: units the sibling GDDs need (degrees, m/s²) are missing; Home Valley, Save & Load and Input conflicts flagged to owners
+- [BLOCKING] Core Rules R8 / R11: error screen and data "reached from the start-up scene" contradicts start-up from any scene
+- [BLOCKING] Core Rules R12: batch "later wins" contradicts the sequential check; next_run re-check, held changes across a join, reset vs apply
+- [BLOCKING] Acceptance Criteria 32: checks only the file, not the in-memory asset
+- [BLOCKING] Acceptance Criteria / traceability: limits and shared fields overclaimed; D2 tie, default-step decimals, decimals() vectors, next_run re-check missing; "modified" wording contradicts itself
+- [BLOCKING] Dependencies / Player Fantasy / Edge Cases: downstream table stale (Home Valley, Player Controller, Save & Load, Pack exist); "next frame" residue; pack_slots example is a restart key; save fingerprint wording vs Save & Load
+- [RECOMMENDED] Tuning Knobs: `live_tuning_enabled` and `catalog_load_budget_s` are not game data
+- [RECOMMENDED] Dependencies: SHA-256 under IL2CPP stripping, explicit-shift byte writes, hash marked decided
+- [RECOMMENDED] Acceptance Criteria 42 / 50 / 54: IL2CPP has no managed DLLs; implicit bundle inclusion; RC build recognition
+- [RECOMMENDED] Core Rules R10: revisions are published in-process; readers swap at their own update
+- [RECOMMENDED] Formulas D4: bool absent attributes, record field outside a list
+- [RECOMMENDED] Core Rules R9: schema type vs limits type never compared
+- [RECOMMENDED] Core Rules R12: validate assets on editor save as the fail-hard safety valve
+- [RECOMMENDED] Acceptance Criteria: AC2, 6, 12, 15, 20, 26b, 27, 36, 47, 51, 53, 55 polish; record asset and set fields as lists; rename the "Data" type
+- [RECOMMENDED] Open Questions: co-op live tuning decided before Tier 2a playtests; export from development players deferred
+- [RECOMMENDED] Edge Cases: auto-pause default in the editor (passed to Session & Authority)
+Reviewed-Content-Hash: design/gdd/game-data-and-tuning.md 22b2414d61b302121046b75b87f54d25e342a7ba
+Reviewed-Content-Hash: design/registry/entities.yaml 12cd532b71fc5f95129037b1aa91896d5a34164a
+Reviewed-Content-Hash: .claude/skills/design-review/SKILL.md 4dcc8b81162613c757144532f1b72708ab3ba27f
+Reviewed-Content-Hash: design/gdd/game-concept.md 938271886e41e9485ac0192a80f58c67d7875873
+Reviewed-Content-Hash: design/gdd/session-and-authority.md f37a68281a0fd4afd3cb7fba25e689512daff35a
+Reviewed-Content-Hash: design/gdd/input.md 6c2d7fb845c3742dc665e7b98075adc21ce5afcd
+Reviewed-Content-Hash: design/gdd/ore-and-item-economy.md b7bdd4cbc713caad156e0a73eb06f80b0687dec2
+Reviewed-Content-Hash: design/gdd/home-valley.md 5c961ce5cd566ede00ea37f3a102576775aebcbe
+Reviewed-Content-Hash: design/gdd/player-controller.md cdc13a843d0267048ac1fa555c6dbea6ff34799b
+Reviewed-Content-Hash: design/gdd/save-and-load.md 3692fa336df5d234fba17d801f70aeaceb2d4827
+Reviewed-Content-Hash: design/gdd/pack.md 17efe87b9d5bf2e236506c4e61a72b36cf6c49d5
+Reviewed-Content-Hash: design/gdd/systems-index.md 10a8b83382109f3200507fae031b908bb21500ae
+Reviewed-Content-Hash: docs/architecture/adr-0001-network-model.md cc84170cdb537f0c15976dd57743b457eb7a5897
+Reviewed-Content-Hash: docs/architecture/adr-0002-persistence.md fcc09078ab3cf8ce67a91af226183714eb5d29a8
+Reviewed-Content-Hash: docs/architecture/adr-0003-home-and-storm-persistence.md 220319fd90d8516040a3bcfbd1ab39f474ae1ea0
+
+### Revision 3 — 2026-11-28 (not a review)
+Every blocking and recommended item applied in the same session, at the designer's standing approval: D1, D2 and R3 on int64 scaled integers, with decimals counted from the authored text, a 2^53 magnitude bound and integer nearest-index; field-limits records `limits.<kind>` plus a shared `limits.holdable` (Ore & Item Economy), with `limits` added as a kind; check 9 split into 9a (well formed) and 9b (holds, including in-definition constraints); R5 gains `deg`, `deg_per_s`, `deg_per_px` and `m_per_s2` in place of the radian units; budgets and cross-set rules are owner CI tests outside the catalog; `live_tuning_enabled` and `catalog_load_budget_s` leave the catalog; bootstrap scene loaded by a `BeforeSceneLoad` hook; R12 batches checked against accepted-so-far, `next_run` re-check, held changes discarded on join, reset follows apply; downstream table and Player Fantasy fixed; an "Open conflicts flagged to owners" list (Player Controller, Home Valley, Save & Load, Input). Acceptance criteria 56 to 60 added (63 in all). The CD rulings are decisions 28 to 38. Status In Review; a fresh-session `/design-review` decides Approved. Note: the hashes above stamp the document as reviewed (before this revision).
