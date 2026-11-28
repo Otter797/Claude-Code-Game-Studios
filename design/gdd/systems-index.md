@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-11-26
-> **Last Updated**: 2026-11-27 (Game Data & Tuning designed; earlier the same day reworked for the designer's pivot: the home is a buildable valley, built first)
+> **Last Updated**: 2026-11-27 (Game Data & Tuning and Session & Authority designed; earlier the same day reworked for the designer's pivot: the home is a buildable valley, built first)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -64,7 +64,7 @@ valley home); 16 to 24 are Milestone B (the asteroid run).
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
 | 1 | Game Data & Tuning (inferred) | Core | MVP | Designed | [game-data-and-tuning.md](game-data-and-tuning.md) | — |
-| 2 | Session & Authority | Core | MVP | Not Started | — | — |
+| 2 | Session & Authority | Core | MVP | Designed | [session-and-authority.md](session-and-authority.md) | — |
 | 3 | Input (inferred) | Core | MVP | Not Started | — | — |
 | 4 | Ore & Item Economy (inferred) | Economy | MVP | Not Started | — | Game Data & Tuning |
 | 5 | Home Valley | Gameplay | MVP | Not Started | — | Game Data & Tuning |
@@ -415,10 +415,10 @@ None remaining. Two near-cycles were found and removed:
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 35 |
-| Design docs started | 1 |
+| Design docs started | 2 |
 | Design docs reviewed | 0 |
 | Design docs approved | 0 |
-| MVP systems designed | 1/24 |
+| MVP systems designed | 2/24 |
 | Vertical Slice systems designed | 0/4 |
 
 ---
