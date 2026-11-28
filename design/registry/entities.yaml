@@ -345,6 +345,19 @@ formulas:
     notes: "F1. full_pack_slow and fill are Pack's. MVP: empty walk 3.8, empty sprint 6.2, full walk 2.47, full sprint 4.03 m/s. Creature AI's burrower_speed 4.4 sits between, by design."
     added: 2026-11-28
     revised: ""
+  - name: loaded_clock
+    status: active
+    source: design/gdd/save-and-load.md
+    referenced_by:
+      - design/gdd/save-and-load.md
+    variables:
+      - save.clock
+      - note.clock
+    output_range: [0, null]
+    expression: "note readable and known version and same profile and note.clock > save.clock ? note.clock : save.clock"
+    notes: "F1. The play-time clock a session starts with; never earlier than the main save's. Storms resolves due storms from it."
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -378,6 +391,17 @@ formulas:
 # Required fields: name, status, source, referenced_by, value, unit, added
 
 constants:
+  - name: note_interval_s
+    status: active
+    source: design/gdd/save-and-load.md
+    referenced_by:
+      - design/gdd/save-and-load.md
+      - design/gdd/session-and-authority.md
+    value: 30
+    unit: s
+    notes: "tuning.save_and_load; range 5 to 120; play time between play-time notes (ADR-0003 Decision 8); bounds storm-clock time a crash can lose (F2)"
+    added: 2026-11-28
+    revised: ""
   - name: walk_speed
     status: active
     source: design/gdd/player-controller.md
