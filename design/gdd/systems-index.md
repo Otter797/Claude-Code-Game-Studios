@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-11-26
-> **Last Updated**: 2026-11-28 (Tools & Gear, Pack, Save & Load, Player Controller, Home Valley and Ore & Item Economy designed; on 2026-11-27 Game Data & Tuning, Session & Authority and Input designed; earlier the same day reworked for the designer's pivot: the home is a buildable valley, built first)
+> **Last Updated**: 2026-11-28 (Gathering, Tools & Gear, Pack, Save & Load, Player Controller, Home Valley and Ore & Item Economy designed; on 2026-11-27 Game Data & Tuning, Session & Authority and Input designed; earlier the same day reworked for the designer's pivot: the home is a buildable valley, built first)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -72,7 +72,7 @@ valley home); 16 to 24 are Milestone B (the asteroid run).
 | 7 | Save & Load | Persistence | MVP | Designed | [save-and-load.md](save-and-load.md) | Session & Authority, Game Data & Tuning |
 | 8 | Pack | Gameplay | MVP | Designed | [pack.md](pack.md) | Session & Authority, Ore & Item Economy |
 | 9 | Tools & Gear | Progression | MVP | Designed | [tools-and-gear.md](tools-and-gear.md) | Game Data & Tuning, Ore & Item Economy |
-| 10 | Gathering | Gameplay | MVP | Not Started | — | Player Controller, Home Valley, Pack, Ore & Item Economy |
+| 10 | Gathering | Gameplay | MVP | Designed | [gathering.md](gathering.md) | Player Controller, Home Valley, Pack, Ore & Item Economy |
 | 11 | Building | Progression | MVP | Not Started | — | Player Controller, Home Valley, Tools & Gear, Ore & Item Economy, Save & Load |
 | 12 | Stash | Economy | MVP | Not Started | — | Building, Save & Load, Pack, Ore & Item Economy |
 | 13 | Crafting | Progression | MVP | Not Started | — | Building, Stash, Tools & Gear, Ore & Item Economy |
@@ -415,10 +415,10 @@ None remaining. Two near-cycles were found and removed:
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 35 |
-| Design docs started | 9 |
+| Design docs started | 10 |
 | Design docs reviewed | 0 |
 | Design docs approved | 0 |
-| MVP systems designed | 9/24 |
+| MVP systems designed | 10/24 |
 | Vertical Slice systems designed | 0/4 |
 
 ---

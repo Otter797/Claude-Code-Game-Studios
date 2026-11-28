@@ -191,6 +191,7 @@ items:
     referenced_by:
       - design/gdd/ore-and-item-economy.md
       - design/gdd/home-valley.md
+      - design/gdd/gathering.md
     category: material
     family: none
     tier: 0
@@ -204,6 +205,7 @@ items:
     referenced_by:
       - design/gdd/ore-and-item-economy.md
       - design/gdd/home-valley.md
+      - design/gdd/gathering.md
     category: material
     family: none
     tier: 0
@@ -228,6 +230,7 @@ items:
     source: design/gdd/home-valley.md
     referenced_by:
       - design/gdd/home-valley.md
+      - design/gdd/gathering.md
     category: gatherable
     gives: material.rock
     yield: 3
@@ -240,6 +243,7 @@ items:
     source: design/gdd/home-valley.md
     referenced_by:
       - design/gdd/home-valley.md
+      - design/gdd/gathering.md
     category: gatherable
     gives: material.stick
     yield: 3
@@ -377,6 +381,7 @@ formulas:
     referenced_by:
       - design/gdd/home-valley.md
       - design/gdd/player-controller.md
+      - design/gdd/gathering.md
     variables:
       - need
       - yield
@@ -474,6 +479,37 @@ formulas:
     output_range: [2, 60]
     expression: "ready_tick = change_tick + ceil(equip_time_s * tick_rate_hz)"
     notes: "F3. Output range is the delay in ticks; 9 ticks with MVP values (0.3 s at 30 Hz)."
+    added: 2026-11-28
+    revised: ""
+  - name: gather_request_count
+    status: active
+    source: design/gdd/gathering.md
+    referenced_by:
+      - design/gdd/gathering.md
+      - design/gdd/home-valley.md
+    variables:
+      - yield
+      - room
+    output_range: [0, 20]
+    expression: "n = min(yield, room)"
+    notes: "F1. n = 0 is refused No room before TakeFromSpot; Home Valley returns p = min(n, remaining)."
+    added: 2026-11-28
+    revised: ""
+  - name: gather_pick_rate
+    status: active
+    source: design/gdd/gathering.md
+    referenced_by:
+      - design/gdd/gathering.md
+      - design/gdd/home-valley.md
+    variables:
+      - gather_lock_s
+      - aim_s
+      - yield
+      - d_hop
+      - v_walk
+    output_range: [0.03, 10]
+    expression: "t_pick = gather_lock_s + aim_s; rate = yield / (t_pick + d_hop / v_walk)"
+    notes: "F2. MVP t_pick 1.0 s (read by Home Valley F4), rate 0.97 units/s. Warns when Home Valley F4 exceeds valley_gather_time_max_s."
     added: 2026-11-28
     revised: ""
 
@@ -604,6 +640,26 @@ constants:
     value: 0.3
     unit: s
     notes: "tuning.tools_and_gear; range 0.1 to 1.0; kept below the burrower's 0.55 s bite wind-up"
+    added: 2026-11-28
+    revised: ""
+  - name: gather_range_m
+    status: active
+    source: design/gdd/gathering.md
+    referenced_by:
+      - design/gdd/gathering.md
+    value: 2.5
+    unit: m
+    notes: "tuning.gathering; range 1.0 to 5.0; kept equal to Pack's pickup_range_m"
+    added: 2026-11-28
+    revised: ""
+  - name: gather_lock_s
+    status: active
+    source: design/gdd/gathering.md
+    referenced_by:
+      - design/gdd/gathering.md
+    value: 0.5
+    unit: s
+    notes: "tuning.gathering; range 0.1 to 1.5; with aim_s 0.5 gives t_pick 1.0 s (Gathering F2, Home Valley F4)"
     added: 2026-11-28
     revised: ""
 
