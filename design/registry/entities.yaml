@@ -360,6 +360,20 @@ formulas:
     notes: "F1. The play-time clock a session starts with; never earlier than the main save's. Storms resolves due storms from it."
     added: 2026-11-28
     revised: ""
+  - name: escape_crossover_fill
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+    variables:
+      - burrower_speed
+      - sprint_speed
+      - full_pack_slow
+    output_range: [0, 1]
+    expression: "(1 - burrower_speed / sprint_speed) / full_pack_slow"
+    notes: "F4. Validation warning outside 0.6 to 0.95; 0.829 with MVP values (13.3 of 16 slots). Ties Pack, Player Controller and Creature AI."
+    added: 2026-11-28
+    revised: ""
 
 # Example:
 #
@@ -393,6 +407,28 @@ formulas:
 # Required fields: name, status, source, referenced_by, value, unit, added
 
 constants:
+  - name: pack_slots
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+      - design/gdd/ore-and-item-economy.md
+    value: 16
+    unit: count
+    notes: "tuning.pack; range 8 to 40; stack_scale 1, so one ore piece per slot (prototype, retested)"
+    added: 2026-11-28
+    revised: ""
+  - name: full_pack_slow
+    status: active
+    source: design/gdd/pack.md
+    referenced_by:
+      - design/gdd/pack.md
+      - design/gdd/player-controller.md
+    value: 0.35
+    unit: share
+    notes: "tuning.pack; range 0 to 0.6; applied by Player Controller F1 with fill = filled slots / pack_slots (Pack F1, F2)"
+    added: 2026-11-28
+    revised: ""
   - name: note_interval_s
     status: active
     source: design/gdd/save-and-load.md
